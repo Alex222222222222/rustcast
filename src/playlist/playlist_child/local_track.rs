@@ -1,11 +1,14 @@
 use async_trait::async_trait;
+use core::str;
 use derive_lazy_playlist_child::LazyPlaylistChild;
 use id3::TagLike;
 use log::debug;
 use once_cell::sync::Lazy;
 use std::{collections::HashMap, sync::Arc};
 
-use tokio::io::AsyncRead;
+use tokio::io::{AsyncRead, AsyncReadExt};
+
+use crate::playlist::DEFAULT_FRAME_SIZE;
 
 use super::PlaylistChild;
 
@@ -111,6 +114,7 @@ pub struct LocalFileTrackInner {
     repeat: bool,
     played: bool,
     byte_per_millisecond: u128,
+    current_stream: Option<Box<dyn AsyncRead + Send + Sync + Unpin>>,
 }
 
 impl LocalFileTrackInner {
@@ -158,6 +162,7 @@ impl LocalFileTrackInner {
             repeat,
             played: false,
             byte_per_millisecond: meta_data.byte_per_millisecond,
+            current_stream: None,
         })
     }
 }
@@ -176,16 +181,42 @@ impl PlaylistChild for LocalFileTrackInner {
         Ok(self.content_type.clone())
     }
 
-    async fn next_stream(
-        &mut self,
-    ) -> anyhow::Result<Option<(Box<dyn AsyncRead + Unpin + Sync + std::marker::Send>, u128)>> {
+    async fn byte_per_millisecond(&mut self) -> anyhow::Result<u128> {
+        Ok(self.byte_per_millisecond)
+    }
+
+    async fn next_frame(&mut self) -> anyhow::Result<Option<bytes::Bytes>> {
         if self.played && !self.repeat {
+            self.current_stream = None;
             return Ok(None);
         }
 
-        let stream = tokio::fs::File::open(&self.path).await?;
-        self.played = true;
-        Ok(Some((Box::new(stream), self.byte_per_millisecond)))
+        if self.current_stream.is_none() {
+            let stream = tokio::fs::File::open(&self.path).await?;
+            self.current_stream = Some(Box::new(stream));
+        }
+
+        let stream = self.current_stream.as_mut().unwrap();
+        let mut buf = vec![0; DEFAULT_FRAME_SIZE];
+        let mut read = stream.read(&mut buf).await?;
+        if read == 0 {
+            self.played = true;
+            if !self.repeat {
+                self.current_stream = None;
+                return Ok(None);
+            }
+
+            let mut stream = tokio::fs::File::open(&self.path).await?;
+            read = stream.read(&mut buf).await?;
+            if read == 0 {
+                self.current_stream = None;
+                anyhow::bail!("failed to read from file: {}", self.path);
+            }
+            self.current_stream = Some(Box::new(stream));
+        }
+
+        let frame = bytes::Bytes::from(buf).slice(0..read);
+        Ok(Some(frame))
     }
 
     async fn is_finished(&mut self) -> anyhow::Result<bool> {
@@ -194,6 +225,7 @@ impl PlaylistChild for LocalFileTrackInner {
 
     async fn reset(&mut self) -> anyhow::Result<()> {
         self.played = false;
+        self.current_stream = None;
         Ok(())
     }
 }

@@ -38,15 +38,25 @@ pub fn impl_playlist_child(name: &Ident, generics: &Generics) -> proc_macro2::To
                 }
             }
 
+            /// return the current byte_per_millisecond
+            async fn byte_per_millisecond(&mut self) -> anyhow::Result<u128> {
+                self.init().await?;
+                if let Some(inner) = &mut self.inner {
+                    inner.byte_per_millisecond().await
+                } else {
+                    anyhow::bail!("inner is none")
+                }
+            }
+
             /// return a stream representing the current track, and the byte_per_millisecond
             /// the stream should be closed when the track is finished
             /// return none if the playlist is finished
-            async fn next_stream(
+            async fn next_frame(
                 &mut self,
-            ) -> anyhow::Result<Option<(Box<dyn tokio::io::AsyncRead + Unpin + Sync + std::marker::Send>, u128)>> {
+            ) -> anyhow::Result<Option<bytes::Bytes>> {
                 self.init().await?;
                 if let Some(inner) = &mut self.inner {
-                    inner.next_stream().await
+                    inner.next_frame().await
                 } else {
                     anyhow::bail!("inner is none")
                 }

@@ -4,6 +4,8 @@ use proc_macro2::Ident;
 use quote::{quote, quote_spanned};
 use syn::{Data, Generics};
 
+use crate::IGNORED_FIELDS;
+
 pub fn struct_lazy_playlist_child(
     inner_name: &Ident,
     name: &Ident,
@@ -23,14 +25,10 @@ pub fn struct_lazy_playlist_child(
                         Some(f_type) => f_type,
                         None => &f.ty,
                     };
+                    if IGNORED_FIELDS.contains(&name.to_string().as_str()) {
+                        return quote! {};
+                    }
                     match name.to_string().as_str() {
-                        "inner" => quote! {},
-                        "played" => quote! {},
-                        "byte_per_millisecond" => quote! {},
-                        "current_index" => quote! {},
-                        "title" => quote! {},
-                        "artist" => quote! {},
-                        "content_type" => quote! {},
                         "shuffle" => quote_spanned! {name.span()=>
                             #name: #f_type,
                         },

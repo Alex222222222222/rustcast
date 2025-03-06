@@ -2,6 +2,8 @@ use proc_macro2::Ident;
 use quote::{quote, quote_spanned};
 use syn::{Data, Generics};
 
+use crate::IGNORED_FIELDS;
+
 pub fn init_lazy_playlist_child(
     inner_name: &Ident,
     name: &Ident,
@@ -16,14 +18,10 @@ pub fn init_lazy_playlist_child(
                         Some(name) => name,
                         None => panic!("Unnamed field is not supported"),
                     };
+                    if IGNORED_FIELDS.contains(&name.to_string().as_str()) {
+                        return quote! {};
+                    }
                     match name.to_string().as_str() {
-                        "inner" => quote! {},
-                        "played" => quote! {},
-                        "current_index" => quote! {},
-                        "byte_per_millisecond" => quote! {},
-                        "title" => quote! {},
-                        "artist" => quote! {},
-                        "content_type" => quote! {},
                         "shuffle" => quote_spanned! {name.span()=>
                             self.#name,
                         },

@@ -4,6 +4,8 @@ use proc_macro2::Ident;
 use quote::{quote, quote_spanned};
 use syn::{Data, Generics};
 
+use crate::IGNORED_FIELDS;
+
 pub fn new_lazy_playlist_child(
     name: &Ident,
     generics: &Generics,
@@ -34,14 +36,10 @@ fn new_lazy_playlist_child_constructor(data: &Data) -> proc_macro2::TokenStream 
                         Some(name) => name,
                         None => panic!("Unnamed field is not supported"),
                     };
+                    if IGNORED_FIELDS.contains(&name.to_string().as_str()) {
+                        return quote! {};
+                    }
                     match name.to_string().as_str() {
-                        "inner" => quote! {},
-                        "played" => quote! {},
-                        "byte_per_millisecond" => quote! {},
-                        "current_index" => quote! {},
-                        "title" => quote! {},
-                        "artist" => quote! {},
-                        "content_type" => quote! {},
                         "shuffle" => quote_spanned! {name.span()=>
                             #name: #name.unwrap_or(false),
                         },
@@ -82,14 +80,10 @@ fn new_lazy_playlist_child_input(
                         Some(f_type) => f_type,
                         None => &f.ty,
                     };
+                    if IGNORED_FIELDS.contains(&name.to_string().as_str()) {
+                        return quote! {};
+                    }
                     match name.to_string().as_str() {
-                        "inner" => quote! {},
-                        "played" => quote! {},
-                        "byte_per_millisecond" => quote! {},
-                        "current_index" => quote! {},
-                        "title" => quote! {},
-                        "artist" => quote! {},
-                        "content_type" => quote! {},
                         "shuffle" => quote_spanned! {name.span()=>
                             #name: Option<#f_type>,
                         },

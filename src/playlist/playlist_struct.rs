@@ -1,6 +1,7 @@
 use std::{sync::Arc, vec};
 
 use bytes::Bytes;
+use id3::frame;
 use log::debug;
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
@@ -40,7 +41,6 @@ pub struct Playlist {
     newest_prepared_frames: Mutex<PreparedFrame>,
     oldest_prepared_frames: Mutex<PreparedFrame>,
     listener_frame_data_db: Mutex<ListenerFrameData>,
-    current_stream: Arc<Mutex<(Box<dyn AsyncRead + Unpin + Sync + std::marker::Send>, u128)>>,
 }
 
 impl Playlist {
@@ -56,7 +56,6 @@ impl Playlist {
             child,
             newest_prepared_frames: Mutex::new(frame.clone()),
             oldest_prepared_frames: Mutex::new(frame),
-            current_stream: Arc::new(Mutex::new((Box::new(tokio::io::empty()), 0))),
             listener_frame_data_db: ListenerFrameData::new().into(),
         }
     }
@@ -184,26 +183,18 @@ impl Playlist {
         drop(newest_prepared_frames);
 
         loop {
-            let mut current_stream = self.current_stream.lock().await;
-            let mut buf = vec![0; DEFAULT_FRAME_SIZE];
-            let read = current_stream.0.read(&mut buf).await?;
-            if read == 0 {
-                let mut child = self.child.lock().await;
-                if child.is_finished().await? {
+            let mut child = self.child.lock().await;
+            let frame = match child.next_frame().await? {
+                Some(frame) => frame,
+                None => {
+                    // the child is finished
                     return Ok(());
                 }
+            };
+            let byte_per_millisecond = child.byte_per_millisecond().await?;
+            let duration = frame.len() as u128 / byte_per_millisecond;
+            drop(child);
 
-                let new_stream = child.next_stream().await?;
-                if let Some(new_stream) = new_stream {
-                    *current_stream = new_stream;
-                    continue;
-                } else {
-                    return Ok(());
-                }
-            }
-
-            let frame = Bytes::from(buf).slice(0..read);
-            let duration = read as u128 / current_stream.1;
             let prepared_frame = PreparedFrame {
                 id: CONTEXT.get_id().await,
                 frame,

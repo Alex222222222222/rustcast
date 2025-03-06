@@ -11,6 +11,17 @@ mod init_lazy_playlist_child;
 mod new_lazy_playlist_child;
 mod struct_lazy_playlist_child;
 
+const IGNORED_FIELDS: [&str; 8] = [
+    "inner",
+    "played",
+    "current_index",
+    "byte_per_millisecond",
+    "title",
+    "artist",
+    "content_type",
+    "current_stream",
+];
+
 #[proc_macro_derive(LazyPlaylistChild, attributes(custom_input_type))]
 pub fn derive_lazy_playlist_child(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // Parse the input tokens into a syntax tree.
