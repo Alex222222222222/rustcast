@@ -1,12 +1,11 @@
-mod playlist;
+mod listener_frame_data;
 mod playlist_child;
 mod playlist_frame_stream;
+mod playlist_struct;
 
-pub use playlist::Playlist;
-pub use playlist::PreparedFrame;
 pub use playlist_child::{LocalFileTrack, PlaylistChild};
 pub use playlist_frame_stream::PlaylistFrameStream;
-
+pub use playlist_struct::{Playlist, PreparedFrame};
 
 /// default_frame_size: 32768 bytes
 const DEFAULT_FRAME_SIZE: usize = 32768;

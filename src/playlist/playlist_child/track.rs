@@ -30,48 +30,49 @@ static FILE_EXT_CONTENT_TYPES: Lazy<HashMap<String, Arc<String>>> = Lazy::new(||
 });
 
 fn get_content_type_from_path(path: &str) -> Option<Arc<String>> {
-    debug!("get content type from path: {}", path);
-    let ext = match get_ext(path) {
-        Some(ext) => ext,
-        None => return None,
-    };
-    debug!("got file extension: {}", ext);
-    match FILE_EXT_CONTENT_TYPES.get(ext.as_str()) {
-        Some(content_type) => Some(content_type.clone()),
-        None => None,
-    }
+    // debug!("get content type from path: {}", path);
+    let ext = get_ext(path)?;
+    // debug!("got file extension: {}", ext);
+    FILE_EXT_CONTENT_TYPES
+        .get(ext.as_str())
+        .map(|content_type| content_type.clone())
 }
 
 fn get_ext(path: &str) -> Option<String> {
     std::path::Path::new(path)
         .extension()
         .and_then(std::ffi::OsStr::to_str)
-        .and_then(|ext| Some(ext.to_lowercase()))
+        .map(|ext| ext.to_lowercase())
 }
 
-fn get_meta_data_from_file(
-    path: &str,
-) -> anyhow::Result<(Arc<String>, Option<String>, Option<String>, u128)> {
+struct MetaData {
+    content_type: Arc<String>,
+    title: Option<String>,
+    artist: Option<String>,
+    byte_per_millisecond: u128,
+}
+
+fn get_meta_data_from_file(path: &str) -> anyhow::Result<MetaData> {
     let content_type = match get_content_type_from_path(&path) {
         Some(content_type) => content_type,
         None => return Err(anyhow::anyhow!("unsupported file type")),
     };
-    debug!("got content type: {}", content_type);
+    // debug!("got content type: {}", content_type);
 
     let mut title = None;
     let mut artist = None;
     let mut duration = Option::None;
 
-    debug!("reading id3 tag from file: {}", path);
+    // debug!("reading id3 tag from file: {}", path);
     let tag = id3::Tag::read_from_path(&path);
     let tag = id3::partial_tag_ok(tag);
     if let Ok(tag) = tag {
         title = tag.title().and_then(|t| Some(t.to_string()));
         artist = tag.artist().and_then(|t| Some(t.to_string()));
         duration = tag.duration();
-        debug!("got title: {:?}, artist: {:?}", title, artist);
+        // debug!("got title: {:?}, artist: {:?}", title, artist);
     } else {
-        debug!("failed to read id3 tag from file: {}", path);
+        // debug!("failed to read id3 tag from file: {}", path);
     }
 
     if duration.is_none() {
@@ -88,13 +89,18 @@ fn get_meta_data_from_file(
     // get size of the file
     let file = std::fs::File::open(&path)?;
     let size = file.metadata()?.len();
-    debug!("got file size: {}", size);
+    // debug!("got file size: {}", size);
 
     // calculate the bitrate
     let byte_per_millisecond = size / duration as u64 + 1;
-    debug!("byte per millisecond: {}", byte_per_millisecond);
+    // debug!("byte per millisecond: {}", byte_per_millisecond);
 
-    Ok((content_type, title, artist, byte_per_millisecond as u128))
+    Ok(MetaData {
+        content_type,
+        title,
+        artist,
+        byte_per_millisecond: byte_per_millisecond as u128,
+    })
 }
 
 pub struct LocalFileTrack {
@@ -107,11 +113,10 @@ pub struct LocalFileTrack {
 
 impl LocalFileTrack {
     pub fn new(path: String) -> anyhow::Result<Self> {
-        let (content_type, mut title, mut artist, byte_per_millisecond) =
-            get_meta_data_from_file(&path)?;
+        let mut meta_data = get_meta_data_from_file(&path)?;
 
-        if title.is_none() || artist.is_none() {
-            debug!("failed to get title and artist from id3 tag, trying to get from file name");
+        if meta_data.title.is_none() || meta_data.artist.is_none() {
+            // debug!("failed to get title and artist from id3 tag, trying to get from file name");
             let file_name = match std::path::Path::new(&path)
                 .file_name()
                 .and_then(std::ffi::OsStr::to_str)
@@ -122,24 +127,33 @@ impl LocalFileTrack {
 
             let mut file_name = file_name.split('-');
             let first = file_name.next();
-            if title.is_none() {
-                title = first.and_then(|t| Some(t.trim().to_string()));
+            if meta_data.title.is_none() {
+                meta_data.title = first.and_then(|t| Some(t.trim().to_string()));
             }
-            if artist.is_none() {
-                artist = file_name.next().and_then(|t| Some(t.trim().to_string()));
+            if meta_data.artist.is_none() {
+                meta_data.artist = file_name.next().and_then(|t| Some(t.trim().to_string()));
             }
-            debug!("got title: {:?}, artist: {:?}", title, artist);
+            // debug!(
+            //     "got title: {:?}, artist: {:?}",
+            //     meta_data.title, meta_data.artist
+            // );
         }
 
-        let title = title.unwrap_or("Unknown Track".to_string()).into();
-        let artist = artist.unwrap_or("Unknown Artist".to_string()).into();
+        let title = meta_data
+            .title
+            .unwrap_or("Unknown Track".to_string())
+            .into();
+        let artist = meta_data
+            .artist
+            .unwrap_or("Unknown Artist".to_string())
+            .into();
 
         Ok(Self {
             path,
             title,
             artist,
-            content_type,
-            byte_per_millisecond,
+            content_type: meta_data.content_type,
+            byte_per_millisecond: meta_data.byte_per_millisecond,
         })
     }
 }

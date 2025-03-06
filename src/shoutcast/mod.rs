@@ -45,7 +45,7 @@ async fn process(
     };
     drop(transport_lock);
 
-    debug!("handle request: {:?}", request);
+    // debug!("handle request: {:?}", request);
     let path = request.uri().path();
     let path = path.trim_matches('/');
     let playlist = playlists.get(path);
@@ -53,10 +53,10 @@ async fn process(
         let mut handler = RequestHandler::new(transport.clone(), playlist.clone(), request);
         handler.handle_request().await?;
     } else {
-        debug!("playlist not found for path: {path}");
+        // debug!("playlist not found for path: {path}");
     }
 
-    debug!("connection closed");
+    // debug!("connection closed");
 
     Ok(())
 }

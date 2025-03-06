@@ -49,7 +49,6 @@ impl<'a> Stream for PlaylistFrameStream {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        debug!("poll next frame");
         async fn next_frame(
             playlist: Arc<Playlist>,
             current_stream_frame: PreparedFrame,
@@ -67,6 +66,7 @@ impl<'a> Stream for PlaylistFrameStream {
         }
 
         if let Some(ref mut future) = self.waiting_pending_future {
+            // debug!("poll waiting future");
             // Poll the future and check if it's ready
             match future.as_mut().poll(cx) {
                 Poll::Ready(_) => {
@@ -77,9 +77,11 @@ impl<'a> Stream for PlaylistFrameStream {
         }
 
         if let Some(ref mut future) = self.pending_future {
+            // debug!("poll next frame");
             // Poll the future and check if it's ready
             match future.as_mut().poll(cx) {
                 Poll::Ready(data) => {
+                    // debug!("future is ready");
                     self.pending_future = None; // Reset future
                     match data {
                         Ok(Some(frame)) => {
@@ -96,7 +98,10 @@ impl<'a> Stream for PlaylistFrameStream {
                         }
                     }
                 }
-                Poll::Pending => return Poll::Pending, // Still waiting
+                Poll::Pending => {
+                    // debug!("future is pending");
+                    return Poll::Pending; // Still waiting
+                }
             }
         }
 
@@ -106,8 +111,8 @@ impl<'a> Stream for PlaylistFrameStream {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        if self.write_ahead_duration + self.created_time - current_time > MAX_WRITE_AHEAD_DURATION {
-            debug!("write ahead duration is too high, wait for 5 seconds");
+        if self.write_ahead_duration + self.created_time > MAX_WRITE_AHEAD_DURATION + current_time {
+            // debug!("write ahead duration is too high, wait for 5 seconds");
             // pin the wait future
             self.waiting_pending_future = Some(Box::pin(tokio::time::sleep(
                 std::time::Duration::from_secs(5),
@@ -117,7 +122,7 @@ impl<'a> Stream for PlaylistFrameStream {
         }
 
         // If no future is running and there are items left, start one
-        debug!("no pending future, start new one");
+        // debug!("no pending future, start new one");
         self.pending_future = Some(Box::pin(next_frame(
             self.playlist.clone(),
             self.current_stream_frame.clone(),

@@ -41,6 +41,7 @@ default = []
 db = ["sqlx"]
 
 [profile.release]
-opt-level = 3
-codegen-units = 1
-lto = "fat"
+# opt-level = 3
+# codegen-units = 1
+# lto = "fat"
+debug = 1
