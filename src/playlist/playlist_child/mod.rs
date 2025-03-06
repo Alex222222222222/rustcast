@@ -4,9 +4,11 @@ use async_trait::async_trait;
 
 mod local_track;
 mod local_tracks;
+mod local_folder;
 
 use bytes::Bytes;
 pub use local_track::LocalFileTrack;
+pub use local_tracks::LocalFileTrackList;
 
 #[async_trait]
 pub trait PlaylistChild: Sync + Send {

@@ -1,17 +1,15 @@
-use std::collections::HashMap;
-
 use proc_macro2::Ident;
 use quote::{quote, quote_spanned};
 use syn::{Data, Generics};
 
-use crate::IGNORED_FIELDS;
+use crate::{custom_input_types::{CustomAdditionalInput, CustomInputTypesMap}, IGNORED_FIELDS};
 
 pub fn struct_lazy_playlist_child(
     inner_name: &Ident,
     name: &Ident,
     generics: &Generics,
     data: &Data,
-    input_types: &HashMap<String, syn::Type>,
+    custom_types: &CustomInputTypesMap,
 ) -> proc_macro2::TokenStream {
     let recursive = match data {
         Data::Struct(data) => match &data.fields {
@@ -21,7 +19,7 @@ pub fn struct_lazy_playlist_child(
                         Some(name) => name,
                         None => panic!("Unnamed field is not supported"),
                     };
-                    let f_type = match input_types.get(&name.to_string()) {
+                    let f_type = match custom_types.input_types.get(&name.to_string()) {
                         Some(f_type) => f_type,
                         None => &f.ty,
                     };
@@ -47,6 +45,18 @@ pub fn struct_lazy_playlist_child(
             _ => panic!("Only named struct is supported"),
         },
         _ => panic!("Only struct is supported"),
+    };
+    let recursive2 = custom_types
+        .additional_inputs
+        .iter()
+        .map(|CustomAdditionalInput { name, input_type, .. }| {
+            quote! {
+                #name: #input_type,
+            }
+        });
+    let recursive = quote! {
+        #recursive
+        #(#recursive2)*
     };
 
     quote! {

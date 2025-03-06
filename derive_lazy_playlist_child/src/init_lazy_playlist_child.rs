@@ -2,13 +2,17 @@ use proc_macro2::Ident;
 use quote::{quote, quote_spanned};
 use syn::{Data, Generics};
 
-use crate::IGNORED_FIELDS;
+use crate::{
+    IGNORED_FIELDS,
+    custom_input_types::{CustomAdditionalInput, CustomInputTypesMap},
+};
 
 pub fn init_lazy_playlist_child(
     inner_name: &Ident,
     name: &Ident,
     generics: &Generics,
     data: &Data,
+    custom_types: &CustomInputTypesMap,
 ) -> proc_macro2::TokenStream {
     let recursive = match data {
         Data::Struct(data) => match &data.fields {
@@ -44,6 +48,19 @@ pub fn init_lazy_playlist_child(
             _ => panic!("Only named struct is supported"),
         },
         _ => panic!("Only struct is supported"),
+    };
+    let recursive2 =
+        custom_types
+            .additional_inputs
+            .iter()
+            .map(|CustomAdditionalInput { name, .. }| {
+                quote! {
+                    self.#name,
+                }
+            });
+    let recursive = quote! {
+        #recursive
+        #(#recursive2)*
     };
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();

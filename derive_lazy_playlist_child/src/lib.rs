@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-
-use custom_input_types::CustomInputTypes;
+use custom_input_types::{CustomInputTypes, CustomInputTypesMap};
 use darling::FromDeriveInput;
 use quote::quote;
 use syn::{DeriveInput, parse_macro_input};
@@ -26,7 +24,7 @@ const IGNORED_FIELDS: [&str; 8] = [
 pub fn derive_lazy_playlist_child(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // Parse the input tokens into a syntax tree.
     let input = parse_macro_input!(input as DeriveInput);
-    let input_types: HashMap<String, syn::Type> =
+    let custom_types: CustomInputTypesMap =
         CustomInputTypes::from_derive_input(&input).unwrap().into();
 
     // Used in the quasi-quotation below as `#name`.
@@ -47,19 +45,20 @@ pub fn derive_lazy_playlist_child(input: proc_macro::TokenStream) -> proc_macro:
         &name,
         &generics,
         &input.data,
-        &input_types,
+        &custom_types,
     );
     let new_lazy_playlist_child = new_lazy_playlist_child::new_lazy_playlist_child(
         &name,
         &generics,
         &input.data,
-        &input_types,
+        &custom_types,
     );
     let init_lazy_playlist_child = init_lazy_playlist_child::init_lazy_playlist_child(
         &inner_name,
         &name,
         &generics,
         &input.data,
+        &custom_types,
     );
     let impl_playlist_child = impl_playlist_child::impl_playlist_child(&name, &generics);
 

@@ -1,16 +1,12 @@
-use std::{sync::Arc, vec};
+use std::sync::Arc;
 
 use bytes::Bytes;
-use id3::frame;
 use log::debug;
-use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    sync::Mutex,
-};
+use tokio::sync::Mutex;
 
 use crate::CONTEXT;
 
-use super::{DEFAULT_FRAME_SIZE, PlaylistChild, listener_frame_data::ListenerFrameData};
+use super::{PlaylistChild, listener_frame_data::ListenerFrameData};
 
 /// We keep a linked list of `PreparedFrame` to stream to the client,
 ///     each `prepared_frame` is wrapped in an `Arc<Mutex<PreparedFrame>>`
