@@ -143,22 +143,22 @@ impl Playlist {
     }
 
     /// current_title returns the title of current playing song
-    pub async fn current_title(&self) -> Arc<String> {
+    pub async fn current_title(&self) -> anyhow::Result<Arc<String>> {
         self.child.lock().await.current_title().await
     }
 
     ///    Artist returns the artist which is currently playing.
-    pub async fn current_artist(&self) -> Arc<String> {
+    pub async fn current_artist(&self) -> anyhow::Result<Arc<String>> {
         self.child.lock().await.current_artist().await
     }
 
     /// return the current content type of the playlist
-    pub async fn content_type(&self) -> Arc<String> {
-        self.child.lock().await.content_type().clone()
+    pub async fn content_type(&self) -> anyhow::Result<Arc<String>> {
+        self.child.lock().await.content_type().await
     }
 
     /// check if the Playlist is finished
-    pub async fn is_finished(&self) -> bool {
+    pub async fn is_finished(&self) -> anyhow::Result<bool> {
         self.child.lock().await.is_finished().await
     }
 
@@ -171,7 +171,7 @@ impl Playlist {
     /// or the playlist already has the next frame
     pub async fn prepare_frame(&self) -> anyhow::Result<()> {
         debug!("prepare frame for playlist: {:?}", self.name);
-        if self.is_finished().await {
+        if self.is_finished().await? {
             debug!("playlist is finished: {:?}", self.name);
             return Ok(());
         }
@@ -189,7 +189,7 @@ impl Playlist {
             let read = current_stream.0.read(&mut buf).await?;
             if read == 0 {
                 let mut child = self.child.lock().await;
-                if child.is_finished().await {
+                if child.is_finished().await? {
                     return Ok(());
                 }
 

@@ -130,11 +130,17 @@ impl RequestHandler {
             let frame = match frame_stream.next().await {
                 Some(frame) => frame?,
                 None => {
-                    debug!("playlist finished, listener_id: {}", frame_stream.listener_id);
+                    debug!(
+                        "playlist finished, listener_id: {}",
+                        frame_stream.listener_id
+                    );
                     return Ok(true);
                 }
             };
-            debug!("log current frame, listener_id: {}", frame_stream.listener_id);
+            debug!(
+                "log current frame, listener_id: {}",
+                frame_stream.listener_id
+            );
             handler
                 .playlist
                 .log_current_frame(frame_stream.listener_id, frame.id)
@@ -145,7 +151,10 @@ impl RequestHandler {
                 .write_frame(frame.frame, *bytes_before_next_meta_data)
                 .await?;
 
-            debug!("frame written successfully, listener_id: {}", frame_stream.listener_id);
+            debug!(
+                "frame written successfully, listener_id: {}",
+                frame_stream.listener_id
+            );
 
             Ok(false)
         }
@@ -177,7 +186,7 @@ impl RequestHandler {
         self.sink.send("ICY 200 OK\r\n").await?;
 
         self.sink.send("Content-Type: ").await?;
-        self.sink.send(self.playlist.content_type().await).await?;
+        self.sink.send(self.playlist.content_type().await?).await?;
         self.sink.send("\r\n").await?;
 
         self.sink.send("icy-name: ").await?;
@@ -231,8 +240,8 @@ impl RequestHandler {
         // todo optimize this
         let stream_title = format!(
             "{} - {}",
-            self.playlist.current_title().await,
-            self.playlist.current_artist().await
+            self.playlist.current_title().await?,
+            self.playlist.current_artist().await?
         );
         let stream_title = if stream_title.len() > MAX_META_DATA_SIZE - 15 {
             // Truncate stream title if necessary

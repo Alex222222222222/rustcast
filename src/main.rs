@@ -40,13 +40,11 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "db")]
     let db = db::DB::new().await?;
 
-    let local_track = playlist::LocalFileTrack::new("一样的夏天 - 孙燕姿.mp3".to_string())?;
+    let local_track =
+        playlist::LocalFileTrack::new("一样的夏天 - 孙燕姿.mp3".to_string(), Some(true)).await?;
 
-    let playlist = playlist::Playlist::new(
-        "playlist".to_string(),
-        Arc::new(Mutex::new(local_track)),
-    )
-    .await;
+    let playlist =
+        playlist::Playlist::new("playlist".to_string(), Arc::new(Mutex::new(local_track))).await;
 
     let mut playlists = HashMap::new();
     playlists.insert("".to_string(), Arc::new(playlist));

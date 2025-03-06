@@ -2,20 +2,23 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-mod track;
+mod local_track;
+mod local_tracks;
+
+pub use local_track::LocalFileTrack;
+pub use local_tracks::LocalFileTrackList;
 use tokio::io::AsyncRead;
-pub use track::LocalFileTrack;
 
 #[async_trait]
 pub trait PlaylistChild: Sync + Send {
     /// current_title returns the title of current playing song
-    async fn current_title(&self) -> Arc<String>;
+    async fn current_title(&mut self) -> anyhow::Result<Arc<String>>;
 
     /// Artist returns the artist which is currently playing.
-    async fn current_artist(&self) -> Arc<String>;
+    async fn current_artist(&mut self) -> anyhow::Result<Arc<String>>;
 
     /// return the current content type of the playlist
-    fn content_type(&self) -> Arc<String>;
+    async fn content_type(&mut self) -> anyhow::Result<Arc<String>>;
 
     /// return a stream representing the current track, and the byte_per_millisecond
     /// the stream should be closed when the track is finished
@@ -25,5 +28,8 @@ pub trait PlaylistChild: Sync + Send {
     ) -> anyhow::Result<Option<(Box<dyn AsyncRead + Unpin + Sync + std::marker::Send>, u128)>>;
 
     /// check if the Playlist is finished
-    async fn is_finished(&self) -> bool;
+    async fn is_finished(&mut self) -> anyhow::Result<bool>;
+
+    /// reset the played status of the child
+    async fn reset(&mut self) -> anyhow::Result<()>;
 }

@@ -102,15 +102,44 @@ fn get_meta_data_from_file(path: &str) -> anyhow::Result<MetaData> {
 }
 
 pub struct LocalFileTrack {
+    inner: Option<LocalFileTrackInner>,
+    path: Option<String>,
+    repeat: bool,
+}
+
+impl LocalFileTrack {
+    pub async fn new(path: String, repeat: Option<bool>) -> anyhow::Result<Self> {
+        Ok(Self {
+            inner: None,
+            path: Some(path),
+            repeat: repeat.unwrap_or(false),
+        })
+    }
+
+    async fn init(&mut self) -> anyhow::Result<()> {
+        if self.inner.is_none() {
+            let path = match self.path.take() {
+                Some(path) => path,
+                None => return Err(anyhow::anyhow!("path is none")),
+            };
+            self.inner = Some(LocalFileTrackInner::new(path, self.repeat)?);
+        }
+        Ok(())
+    }
+}
+
+pub struct LocalFileTrackInner {
     path: String,
     title: Arc<String>,
     artist: Arc<String>,
     content_type: Arc<String>,
+    repeat: bool,
+    played: bool,
     byte_per_millisecond: u128,
 }
 
-impl LocalFileTrack {
-    pub fn new(path: String) -> anyhow::Result<Self> {
+impl LocalFileTrackInner {
+    pub fn new(path: String, repeat: bool) -> anyhow::Result<Self> {
         let mut meta_data = get_meta_data_from_file(&path)?;
 
         if meta_data.title.is_none() || meta_data.artist.is_none() {
@@ -151,33 +180,45 @@ impl LocalFileTrack {
             title,
             artist,
             content_type: meta_data.content_type,
+            repeat,
+            played: false,
             byte_per_millisecond: meta_data.byte_per_millisecond,
         })
     }
 }
 
 #[async_trait]
-impl PlaylistChild for LocalFileTrack {
-    async fn current_title(&self) -> Arc<String> {
-        self.title.clone()
+impl PlaylistChild for LocalFileTrackInner {
+    async fn current_title(&mut self) -> anyhow::Result<Arc<String>> {
+        Ok(self.title.clone())
     }
 
-    async fn current_artist(&self) -> Arc<String> {
-        self.artist.clone()
+    async fn current_artist(&mut self) -> anyhow::Result<Arc<String>> {
+        Ok(self.artist.clone())
     }
 
-    fn content_type(&self) -> Arc<String> {
-        self.content_type.clone()
+    async fn content_type(&mut self) -> anyhow::Result<Arc<String>> {
+        Ok(self.content_type.clone())
     }
 
     async fn next_stream(
         &mut self,
     ) -> anyhow::Result<Option<(Box<dyn AsyncRead + Unpin + Sync + std::marker::Send>, u128)>> {
+        if self.played && !self.repeat {
+            return Ok(None);
+        }
+
         let stream = tokio::fs::File::open(&self.path).await?;
+        self.played = true;
         Ok(Some((Box::new(stream), self.byte_per_millisecond)))
     }
 
-    async fn is_finished(&self) -> bool {
-        false
+    async fn is_finished(&mut self) -> anyhow::Result<bool> {
+        Ok(self.played && !self.repeat)
+    }
+
+    async fn reset(&mut self) -> anyhow::Result<()> {
+        self.played = false;
+        Ok(())
     }
 }

@@ -253,6 +253,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive_lazy_playlist_child"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1178,6 +1187,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "chrono",
+ "derive_lazy_playlist_child",
  "fern",
  "futures",
  "http",

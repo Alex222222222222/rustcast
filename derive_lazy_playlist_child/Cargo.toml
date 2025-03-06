@@ -1,0 +1,12 @@
+[package]
+name = "derive_lazy_playlist_child"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = "2"
+
+[lib]
+proc-macro = true
