@@ -37,25 +37,25 @@ use super::{DEFAULT_FRAME_SIZE, PlaylistChild, listener_frame_data::ListenerFram
 pub struct Playlist {
     pub name: Arc<String>,
     child: Arc<Mutex<dyn PlaylistChild>>,
-    newest_prepared_frames: Arc<Mutex<PreparedFrame>>,
-    oldest_prepared_frames: Arc<Mutex<PreparedFrame>>,
+    newest_prepared_frames: Mutex<PreparedFrame>,
+    oldest_prepared_frames: Mutex<PreparedFrame>,
     listener_frame_data_db: Mutex<ListenerFrameData>,
     current_stream: Arc<Mutex<(Box<dyn AsyncRead + Unpin + Sync + std::marker::Send>, u128)>>,
 }
 
 impl Playlist {
     pub async fn new(name: String, child: Arc<Mutex<dyn PlaylistChild>>) -> Self {
-        let frame = Arc::new(Mutex::new(PreparedFrame {
+        let frame = PreparedFrame {
             frame: Bytes::new(),
             duration: 0,
             id: CONTEXT.get_id().await,
             next: Arc::new(Mutex::new(None)),
-        }));
+        };
         Self {
             name: name.into(),
             child,
-            newest_prepared_frames: frame.clone(),
-            oldest_prepared_frames: frame,
+            newest_prepared_frames: Mutex::new(frame.clone()),
+            oldest_prepared_frames: Mutex::new(frame),
             current_stream: Arc::new(Mutex::new((Box::new(tokio::io::empty()), 0))),
             listener_frame_data_db: ListenerFrameData::new().into(),
         }
@@ -90,6 +90,11 @@ impl Playlist {
     }
 
     async fn update_oldest_frame_by_db_smallest_frame_id(&self) -> anyhow::Result<()> {
+        while self.get_smallest_frame_id().await?.is_none() {
+            if !self.advance_oldest_frame().await {
+                break;
+            }
+        }
         let db_smallest_frame_id = match self.get_smallest_frame_id().await? {
             Some(id) => id,
             None => return Ok(()),
@@ -97,25 +102,40 @@ impl Playlist {
 
         let mut self_oldest_frame_id = self.get_self_oldest_frame_id().await;
 
-        // debug!(
-        //     "update_oldest_frame_by_db_smallest_frame_id: db_smallest_frame_id: {}, self_oldest_frame_id: {}",
-        //     db_smallest_frame_id, self_oldest_frame_id
-        // );
+        debug!(
+            "update_oldest_frame_by_db_smallest_frame_id: db_smallest_frame_id: {}, self_oldest_frame_id: {}",
+            db_smallest_frame_id, self_oldest_frame_id
+        );
 
+        debug!(
+            "update_oldest_frame_by_db_smallest_frame_id: db_smallest_frame_id: {}, self_oldest_frame_id: {}",
+            db_smallest_frame_id, self_oldest_frame_id
+        );
         while db_smallest_frame_id > self_oldest_frame_id {
-            self.advance_oldest_frame().await;
+            if !self.advance_oldest_frame().await {
+                break;
+            }
             self_oldest_frame_id = self.get_self_oldest_frame_id().await;
         }
 
         Ok(())
     }
 
-    async fn advance_oldest_frame(&self) {
+    async fn advance_oldest_frame(&self) -> bool {
         let mut oldest_prepared_frames = self.oldest_prepared_frames.lock().await;
+        debug!("is unique: {:?}", oldest_prepared_frames.frame.is_unique());
+        if !(oldest_prepared_frames.frame.is_unique() || oldest_prepared_frames.frame.is_empty()) {
+            return false;
+        }
+        oldest_prepared_frames.frame.clear();
         let next = oldest_prepared_frames.get_next().await;
+        debug!("advance oldest frame: {:?}", oldest_prepared_frames.id);
         if let Some(next) = next {
             *oldest_prepared_frames = next;
+            return true;
         }
+
+        false
     }
 
     async fn get_self_oldest_frame_id(&self) -> usize {
@@ -150,15 +170,15 @@ impl Playlist {
     /// do nothing if the playlist is finished
     /// or the playlist already has the next frame
     pub async fn prepare_frame(&self) -> anyhow::Result<()> {
-        // debug!("prepare frame for playlist: {:?}", self.name);
+        debug!("prepare frame for playlist: {:?}", self.name);
         if self.is_finished().await {
-            // debug!("playlist is finished: {:?}", self.name);
+            debug!("playlist is finished: {:?}", self.name);
             return Ok(());
         }
 
         let newest_prepared_frames = self.newest_prepared_frames.lock().await;
         if newest_prepared_frames.has_next().await {
-            // debug!("playlist already has next frame: {:?}", self.name);
+            debug!("playlist already has next frame: {:?}", self.name);
             return Ok(());
         }
         drop(newest_prepared_frames);
@@ -220,7 +240,7 @@ impl PreparedFrame {
     }
 
     pub async fn get_next(&self) -> Option<PreparedFrame> {
-        (*self.next.lock().await).as_ref().map(|next| next.clone())
+        (*self.next.lock().await).clone()
     }
 
     pub async fn set_next(&self, next: PreparedFrame) {

@@ -25,19 +25,19 @@ impl ListenerFrameData {
             self.index.remove(&(frame_id, listener_id));
         }
 
-        // // debug!("delete listener data: listener_id: {}", listener_id);
-        // // debug!("listener data: {:?}", self.data);
-        // // debug!("listener index: {:?}", self.index);
+        // debug!("delete listener data: listener_id: {}", listener_id);
+        // debug!("listener data: {:?}", self.data);
+        // debug!("listener index: {:?}", self.index);
     }
 
     /// log the listener current frame
     pub fn log_current_frame(&mut self, listener_id: usize, frame_id: usize) {
-        // debug!("log current frame: listener_id: {}, frame_id: {}", listener_id, frame_id);
+        debug!("log current frame: listener_id: {}, frame_id: {}", listener_id, frame_id);
         self.delete_listener_data(listener_id);
         self.data.insert(listener_id, frame_id);
         self.index.insert((frame_id, listener_id));
-        // debug!("listener data: {:?}", self.data);
-        // debug!("listener index: {:?}", self.index);
+        debug!("listener data: {:?}", self.data);
+        debug!("listener index: {:?}", self.index);
     }
 
     /// get the smallest frame id in ListenerFrame

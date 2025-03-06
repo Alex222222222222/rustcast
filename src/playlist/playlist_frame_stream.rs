@@ -10,6 +10,9 @@ use crate::{
 
 use super::Playlist;
 
+type PlaylistFrameStreamPendingFuture =
+    Pin<Box<dyn futures::Future<Output = anyhow::Result<Option<PreparedFrame>>> + Send>>;
+
 pub struct PlaylistFrameStream {
     playlist: Arc<Playlist>,
     pub listener_id: usize,
@@ -18,13 +21,11 @@ pub struct PlaylistFrameStream {
     write_ahead_duration: u128,
     /// created time of the stream in milliseconds since epoch
     created_time: u128,
-    pending_future: Option<
-        Pin<Box<dyn futures::Future<Output = anyhow::Result<Option<PreparedFrame>>> + Send>>,
-    >,
+    pending_future: Option<PlaylistFrameStreamPendingFuture>,
     waiting_pending_future: Option<Pin<Box<dyn futures::Future<Output = ()> + Send>>>,
 }
 
-impl<'a> PlaylistFrameStream {
+impl PlaylistFrameStream {
     pub async fn new(playlist: Arc<Playlist>) -> Self {
         let current_stream_frame = playlist.get_oldest_prepared_frames().await;
         Self {
@@ -42,7 +43,7 @@ impl<'a> PlaylistFrameStream {
     }
 }
 
-impl<'a> Stream for PlaylistFrameStream {
+impl Stream for PlaylistFrameStream {
     type Item = anyhow::Result<PreparedFrame>;
 
     fn poll_next(
@@ -66,7 +67,7 @@ impl<'a> Stream for PlaylistFrameStream {
         }
 
         if let Some(ref mut future) = self.waiting_pending_future {
-            // debug!("poll waiting future");
+            debug!("poll waiting future");
             // Poll the future and check if it's ready
             match future.as_mut().poll(cx) {
                 Poll::Ready(_) => {
@@ -77,14 +78,18 @@ impl<'a> Stream for PlaylistFrameStream {
         }
 
         if let Some(ref mut future) = self.pending_future {
-            // debug!("poll next frame");
+            debug!("poll next frame");
             // Poll the future and check if it's ready
             match future.as_mut().poll(cx) {
                 Poll::Ready(data) => {
-                    // debug!("future is ready");
+                    debug!("future is ready");
                     self.pending_future = None; // Reset future
                     match data {
                         Ok(Some(frame)) => {
+                            debug!(
+                                "current_stream_frame: {:?}, frame: {}",
+                                self.current_stream_frame.id, frame.id
+                            );
                             self.current_stream_frame = frame.clone();
                             self.write_ahead_duration += frame.duration;
                             return Poll::Ready(Some(Ok(frame)));
@@ -99,7 +104,7 @@ impl<'a> Stream for PlaylistFrameStream {
                     }
                 }
                 Poll::Pending => {
-                    // debug!("future is pending");
+                    debug!("future is pending");
                     return Poll::Pending; // Still waiting
                 }
             }
@@ -112,7 +117,7 @@ impl<'a> Stream for PlaylistFrameStream {
             .unwrap()
             .as_millis();
         if self.write_ahead_duration + self.created_time > MAX_WRITE_AHEAD_DURATION + current_time {
-            // debug!("write ahead duration is too high, wait for 5 seconds");
+            debug!("write ahead duration is too high, wait for 5 seconds");
             // pin the wait future
             self.waiting_pending_future = Some(Box::pin(tokio::time::sleep(
                 std::time::Duration::from_secs(5),
@@ -122,7 +127,7 @@ impl<'a> Stream for PlaylistFrameStream {
         }
 
         // If no future is running and there are items left, start one
-        // debug!("no pending future, start new one");
+        debug!("no pending future, start new one");
         self.pending_future = Some(Box::pin(next_frame(
             self.playlist.clone(),
             self.current_stream_frame.clone(),

@@ -30,12 +30,10 @@ static FILE_EXT_CONTENT_TYPES: Lazy<HashMap<String, Arc<String>>> = Lazy::new(||
 });
 
 fn get_content_type_from_path(path: &str) -> Option<Arc<String>> {
-    // debug!("get content type from path: {}", path);
+    debug!("get content type from path: {}", path);
     let ext = get_ext(path)?;
-    // debug!("got file extension: {}", ext);
-    FILE_EXT_CONTENT_TYPES
-        .get(ext.as_str())
-        .map(|content_type| content_type.clone())
+    debug!("got file extension: {}", ext);
+    FILE_EXT_CONTENT_TYPES.get(ext.as_str()).cloned()
 }
 
 fn get_ext(path: &str) -> Option<String> {
@@ -53,30 +51,30 @@ struct MetaData {
 }
 
 fn get_meta_data_from_file(path: &str) -> anyhow::Result<MetaData> {
-    let content_type = match get_content_type_from_path(&path) {
+    let content_type = match get_content_type_from_path(path) {
         Some(content_type) => content_type,
         None => return Err(anyhow::anyhow!("unsupported file type")),
     };
-    // debug!("got content type: {}", content_type);
+    debug!("got content type: {}", content_type);
 
     let mut title = None;
     let mut artist = None;
     let mut duration = Option::None;
 
-    // debug!("reading id3 tag from file: {}", path);
-    let tag = id3::Tag::read_from_path(&path);
+    debug!("reading id3 tag from file: {}", path);
+    let tag = id3::Tag::read_from_path(path);
     let tag = id3::partial_tag_ok(tag);
     if let Ok(tag) = tag {
-        title = tag.title().and_then(|t| Some(t.to_string()));
-        artist = tag.artist().and_then(|t| Some(t.to_string()));
+        title = tag.title().map(|t| t.to_string());
+        artist = tag.artist().map(|t| t.to_string());
         duration = tag.duration();
-        // debug!("got title: {:?}, artist: {:?}", title, artist);
+        debug!("got title: {:?}, artist: {:?}", title, artist);
     } else {
-        // debug!("failed to read id3 tag from file: {}", path);
+        debug!("failed to read id3 tag from file: {}", path);
     }
 
     if duration.is_none() {
-        duration = match mp3_duration::from_path(&path) {
+        duration = match mp3_duration::from_path(path) {
             Ok(duration) => Some((duration.as_nanos() / 1_000_000) as u32),
             Err(_) => None,
         };
@@ -87,13 +85,13 @@ fn get_meta_data_from_file(path: &str) -> anyhow::Result<MetaData> {
     };
 
     // get size of the file
-    let file = std::fs::File::open(&path)?;
+    let file = std::fs::File::open(path)?;
     let size = file.metadata()?.len();
-    // debug!("got file size: {}", size);
+    debug!("got file size: {}", size);
 
     // calculate the bitrate
     let byte_per_millisecond = size / duration as u64 + 1;
-    // debug!("byte per millisecond: {}", byte_per_millisecond);
+    debug!("byte per millisecond: {}", byte_per_millisecond);
 
     Ok(MetaData {
         content_type,
@@ -116,7 +114,7 @@ impl LocalFileTrack {
         let mut meta_data = get_meta_data_from_file(&path)?;
 
         if meta_data.title.is_none() || meta_data.artist.is_none() {
-            // debug!("failed to get title and artist from id3 tag, trying to get from file name");
+            debug!("failed to get title and artist from id3 tag, trying to get from file name");
             let file_name = match std::path::Path::new(&path)
                 .file_name()
                 .and_then(std::ffi::OsStr::to_str)
@@ -128,15 +126,15 @@ impl LocalFileTrack {
             let mut file_name = file_name.split('-');
             let first = file_name.next();
             if meta_data.title.is_none() {
-                meta_data.title = first.and_then(|t| Some(t.trim().to_string()));
+                meta_data.title = first.map(|t| t.trim().to_string());
             }
             if meta_data.artist.is_none() {
-                meta_data.artist = file_name.next().and_then(|t| Some(t.trim().to_string()));
+                meta_data.artist = file_name.next().map(|t| t.trim().to_string())
             }
-            // debug!(
-            //     "got title: {:?}, artist: {:?}",
-            //     meta_data.title, meta_data.artist
-            // );
+            debug!(
+                "got title: {:?}, artist: {:?}",
+                meta_data.title, meta_data.artist
+            );
         }
 
         let title = meta_data

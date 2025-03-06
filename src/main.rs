@@ -1,5 +1,5 @@
-#[global_allocator]
-static A: std::alloc::System = std::alloc::System;
+// # [global_allocator]
+// static A: std::alloc::System = std::alloc::System;
 
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
@@ -18,7 +18,6 @@ pub use db::DB;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    /*
     fern::Dispatch::new()
         // Perform allocation-free log formatting
         .format(|out, message, record| {
@@ -37,7 +36,6 @@ async fn main() -> anyhow::Result<()> {
         // Apply globally
         .apply()
         .unwrap();
-    */
 
     #[cfg(feature = "db")]
     let db = db::DB::new().await?;

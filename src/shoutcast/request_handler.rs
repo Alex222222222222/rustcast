@@ -50,7 +50,7 @@ macro_rules! impl_send2_sink {
                 type Error = std::io::Error;
 
                 fn encode(&mut self, i: $t, dst: &mut bytes::BytesMut) -> std::io::Result<()> {
-                    // debug!("dst len: {}", dst.len());
+                    debug!("dst len: {}", dst.len());
                     dst.extend_from_slice(i.as_bytes());
                     Ok(())
                 }
@@ -83,7 +83,7 @@ impl tokio_util::codec::Encoder<Bytes> for super::Http {
 impl Send2Sink<Bytes> for MySink {
     async fn send(&self, data: Bytes) -> anyhow::Result<()> {
         let s = self.0.lock();
-        // debug!("lock my sink");
+        debug!("lock my sink");
         s.await.send(data).await?;
         Ok(())
     }
@@ -114,7 +114,7 @@ impl RequestHandler {
     /// decoded ServeRequest is called. The connection is closed once HandleRequest
     /// finishes.
     pub async fn handle_request(&mut self) -> anyhow::Result<()> {
-        // debug!("handle request for playlist: {:?}", self.playlist.name);
+        debug!("handle request for playlist: {:?}", self.playlist.name);
 
         self.write_stream_start_response().await?;
 
@@ -126,26 +126,26 @@ impl RequestHandler {
             frame_stream: &mut PlaylistFrameStream,
             bytes_before_next_meta_data: &mut usize,
         ) -> anyhow::Result<bool> {
-            // debug!("Get next frame, listener_id: {}", frame_stream.listener_id);
+            debug!("Get next frame, listener_id: {}", frame_stream.listener_id);
             let frame = match frame_stream.next().await {
                 Some(frame) => frame?,
                 None => {
-                    // debug!("playlist finished, listener_id: {}", frame_stream.listener_id);
+                    debug!("playlist finished, listener_id: {}", frame_stream.listener_id);
                     return Ok(true);
                 }
             };
-            // debug!("log current frame, listener_id: {}", frame_stream.listener_id);
+            debug!("log current frame, listener_id: {}", frame_stream.listener_id);
             handler
                 .playlist
                 .log_current_frame(frame_stream.listener_id, frame.id)
                 .await?;
 
-            // debug!("write frame, listener_id: {}", frame_stream.listener_id);
+            debug!("write frame, listener_id: {}", frame_stream.listener_id);
             *bytes_before_next_meta_data = handler
                 .write_frame(frame.frame, *bytes_before_next_meta_data)
                 .await?;
 
-            // debug!("frame written successfully, listener_id: {}", frame_stream.listener_id);
+            debug!("frame written successfully, listener_id: {}", frame_stream.listener_id);
 
             Ok(false)
         }
@@ -154,7 +154,7 @@ impl RequestHandler {
             let e =
                 write_next_frame(self, &mut frame_stream, &mut bytes_before_next_meta_data).await;
             if let Err(e) = e {
-                // debug!("error writing frame: {:?}", e);
+                debug!("error writing frame: {:?}", e);
                 self.playlist
                     .delete_listener_data(frame_stream.listener_id)
                     .await?;
@@ -173,7 +173,7 @@ impl RequestHandler {
     }
     /// writeStreamStartResponse writes the start response to the client.
     async fn write_stream_start_response(&mut self) -> anyhow::Result<()> {
-        // debug!("write stream start response");
+        debug!("write stream start response");
         self.sink.send("ICY 200 OK\r\n").await?;
 
         self.sink.send("Content-Type: ").await?;
@@ -185,7 +185,7 @@ impl RequestHandler {
         self.sink.send("\r\n").await?;
 
         if self.meta_data_support {
-            // debug!("meta data support enabled");
+            debug!("meta data support enabled");
             self.sink.send("icy-metadata: 1\r\n").await?;
 
             self.sink.send("icy-metaint: ").await?;
@@ -203,26 +203,26 @@ impl RequestHandler {
         frame: Bytes,
         bytes_before_next_meta_data: usize,
     ) -> anyhow::Result<usize> {
-        // debug!("write frame");
+        debug!("write frame");
         let mut frame = frame;
         let mut bytes_before_next_meta_data = bytes_before_next_meta_data;
         while bytes_before_next_meta_data < frame.len() {
-            // debug!("split frame");
+            debug!("split frame");
             let first = frame.split_to(bytes_before_next_meta_data);
             self.sink.send(first).await?;
-            // debug!("write meta data");
+            debug!("write meta data");
             self.write_stream_meta_data().await?;
             bytes_before_next_meta_data = META_DATA_INTERVAL;
         }
 
-        // debug!("send frame");
+        debug!("send frame");
         let len = frame.len();
         if len > 0 {
             self.sink.send(frame).await?;
             bytes_before_next_meta_data -= len;
         }
 
-        // debug!("frame written successfully");
+        debug!("frame written successfully");
         Ok(bytes_before_next_meta_data)
     }
 
