@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use proc_macro2::Ident;
 use quote::{quote, quote_spanned};
 use syn::{Data, Generics};
@@ -7,6 +9,7 @@ pub fn struct_lazy_playlist_child(
     name: &Ident,
     generics: &Generics,
     data: &Data,
+    input_types: &HashMap<String, syn::Type>,
 ) -> proc_macro2::TokenStream {
     let recursive = match data {
         Data::Struct(data) => match &data.fields {
@@ -16,11 +19,15 @@ pub fn struct_lazy_playlist_child(
                         Some(name) => name,
                         None => panic!("Unnamed field is not supported"),
                     };
-                    let f_type = &f.ty;
+                    let f_type = match input_types.get(&name.to_string()) {
+                        Some(f_type) => f_type,
+                        None => &f.ty,
+                    };
                     match name.to_string().as_str() {
                         "inner" => quote! {},
                         "played" => quote! {},
                         "byte_per_millisecond" => quote! {},
+                        "current_index" => quote! {},
                         "title" => quote! {},
                         "artist" => quote! {},
                         "content_type" => quote! {},

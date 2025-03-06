@@ -1,19 +1,13 @@
 extern crate derive_lazy_playlist_child;
 
+use std::sync::Arc;
+
 use crate::playlist::PlaylistChild;
 use async_trait::async_trait;
 use derive_lazy_playlist_child::LazyPlaylistChild;
 
-/*
-pub struct LocalFileTrackList {
-    inner: Option<LocalFileTrackListInner>,
-    tracks_path: Option<Vec<String>>,
-    repeat: bool,
-    shuffle: bool,
-}
-*/
-
 #[derive(LazyPlaylistChild)]
+#[custom_input_type(input_type(name = "tracks", input_type = "Vec<String>"))]
 struct LocalFileTrackListInner {
     /// list of local file tracks
     tracks: Vec<super::LocalFileTrack>,
@@ -26,161 +20,49 @@ struct LocalFileTrackListInner {
 }
 
 impl LocalFileTrackListInner {
-    async fn new(
-        tracks: Vec<super::LocalFileTrack>,
-        current_index: usize,
-        repeat: bool,
-        shuffle: bool,
-    ) -> anyhow::Result<Self> {
+    async fn new(tracks: Vec<String>, repeat: bool, shuffle: bool) -> anyhow::Result<Self> {
         todo!()
     }
 }
 
 #[async_trait]
 impl PlaylistChild for LocalFileTrackListInner {
-    #[doc = " current_title returns the title of current playing song"]
-    #[must_use]
-    #[allow(
-        elided_named_lifetimes,
-        clippy::type_complexity,
-        clippy::type_repetition_in_bounds
-    )]
-    fn current_title<'life0, 'async_trait>(
-        &'life0 mut self,
-    ) -> ::core::pin::Pin<
-        Box<
-            dyn ::core::future::Future<Output = anyhow::Result<Arc<String>>>
-                + ::core::marker::Send
-                + 'async_trait,
-        >,
-    >
-    where
-        'life0: 'async_trait,
-        Self: 'async_trait,
-    {
+    /// current_title returns the title of current playing song
+    async fn current_title(&mut self) -> anyhow::Result<Arc<String>> {
         todo!()
     }
 
-    #[doc = " Artist returns the artist which is currently playing."]
-    #[must_use]
-    #[allow(
-        elided_named_lifetimes,
-        clippy::type_complexity,
-        clippy::type_repetition_in_bounds
-    )]
-    fn current_artist<'life0, 'async_trait>(
-        &'life0 mut self,
-    ) -> ::core::pin::Pin<
-        Box<
-            dyn ::core::future::Future<Output = anyhow::Result<Arc<String>>>
-                + ::core::marker::Send
-                + 'async_trait,
-        >,
-    >
-    where
-        'life0: 'async_trait,
-        Self: 'async_trait,
-    {
+    /// Artist returns the artist which is currently playing.
+    async fn current_artist(&mut self) -> anyhow::Result<Arc<String>> {
         todo!()
     }
 
-    #[doc = " return the current content type of the playlist"]
-    #[must_use]
-    #[allow(
-        elided_named_lifetimes,
-        clippy::type_complexity,
-        clippy::type_repetition_in_bounds
-    )]
-    fn content_type<'life0, 'async_trait>(
-        &'life0 mut self,
-    ) -> ::core::pin::Pin<
-        Box<
-            dyn ::core::future::Future<Output = anyhow::Result<Arc<String>>>
-                + ::core::marker::Send
-                + 'async_trait,
-        >,
-    >
-    where
-        'life0: 'async_trait,
-        Self: 'async_trait,
-    {
+    /// return the current content type of the playlist
+    async fn content_type(&mut self) -> anyhow::Result<Arc<String>> {
         todo!()
     }
 
-    #[doc = " return a stream representing the current track, and the byte_per_millisecond"]
-    #[doc = " the stream should be closed when the track is finished"]
-    #[doc = " return none if the playlist is finished"]
-    #[must_use]
-    #[allow(
-        elided_named_lifetimes,
-        clippy::type_complexity,
-        clippy::type_repetition_in_bounds
-    )]
-    fn next_stream<'life0, 'async_trait>(
-        &'life0 mut self,
-    ) -> ::core::pin::Pin<
-        Box<
-            dyn ::core::future::Future<
-                    Output = anyhow::Result<
-                        Option<(
-                            Box<dyn tokio::io::AsyncRead + Unpin + Sync + std::marker::Send>,
-                            u128,
-                        )>,
-                    >,
-                > + ::core::marker::Send
-                + 'async_trait,
-        >,
-    >
-    where
-        'life0: 'async_trait,
-        Self: 'async_trait,
-    {
+    /// return a stream representing the current track, and the byte_per_millisecond
+    /// the stream should be closed when the track is finished
+    /// return none if the playlist is finished
+    async fn next_stream(
+        &mut self,
+    ) -> anyhow::Result<
+        Option<(
+            Box<dyn tokio::io::AsyncRead + Unpin + Sync + std::marker::Send>,
+            u128,
+        )>,
+    > {
         todo!()
     }
 
-    #[doc = " check if the Playlist is finished"]
-    #[must_use]
-    #[allow(
-        elided_named_lifetimes,
-        clippy::type_complexity,
-        clippy::type_repetition_in_bounds
-    )]
-    fn is_finished<'life0, 'async_trait>(
-        &'life0 mut self,
-    ) -> ::core::pin::Pin<
-        Box<
-            dyn ::core::future::Future<Output = anyhow::Result<bool>>
-                + ::core::marker::Send
-                + 'async_trait,
-        >,
-    >
-    where
-        'life0: 'async_trait,
-        Self: 'async_trait,
-    {
+    /// check if the Playlist is finished
+    async fn is_finished(&mut self) -> anyhow::Result<bool> {
         todo!()
     }
 
-    #[doc = " reset the played status of the child"]
-    #[must_use]
-    #[allow(
-        elided_named_lifetimes,
-        clippy::type_complexity,
-        clippy::type_repetition_in_bounds
-    )]
-    fn reset<'life0, 'async_trait>(
-        &'life0 mut self,
-    ) -> ::core::pin::Pin<
-        Box<
-            dyn ::core::future::Future<Output = anyhow::Result<()>>
-                + ::core::marker::Send
-                + 'async_trait,
-        >,
-    >
-    where
-        'life0: 'async_trait,
-        Self: 'async_trait,
-    {
+    /// reset the played status of the child
+    async fn reset(&mut self) -> anyhow::Result<()> {
         todo!()
     }
 }

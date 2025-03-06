@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use derive_lazy_playlist_child::LazyPlaylistChild;
 use id3::TagLike;
 use log::debug;
 use once_cell::sync::Lazy;
@@ -101,33 +102,7 @@ fn get_meta_data_from_file(path: &str) -> anyhow::Result<MetaData> {
     })
 }
 
-pub struct LocalFileTrack {
-    inner: Option<LocalFileTrackInner>,
-    path: Option<String>,
-    repeat: bool,
-}
-
-impl LocalFileTrack {
-    pub async fn new(path: String, repeat: Option<bool>) -> anyhow::Result<Self> {
-        Ok(Self {
-            inner: None,
-            path: Some(path),
-            repeat: repeat.unwrap_or(false),
-        })
-    }
-
-    async fn init(&mut self) -> anyhow::Result<()> {
-        if self.inner.is_none() {
-            let path = match self.path.take() {
-                Some(path) => path,
-                None => return Err(anyhow::anyhow!("path is none")),
-            };
-            self.inner = Some(LocalFileTrackInner::new(path, self.repeat)?);
-        }
-        Ok(())
-    }
-}
-
+#[derive(LazyPlaylistChild)]
 pub struct LocalFileTrackInner {
     path: String,
     title: Arc<String>,
@@ -139,7 +114,7 @@ pub struct LocalFileTrackInner {
 }
 
 impl LocalFileTrackInner {
-    pub fn new(path: String, repeat: bool) -> anyhow::Result<Self> {
+    pub async fn new(path: String, repeat: bool) -> anyhow::Result<Self> {
         let mut meta_data = get_meta_data_from_file(&path)?;
 
         if meta_data.title.is_none() || meta_data.artist.is_none() {

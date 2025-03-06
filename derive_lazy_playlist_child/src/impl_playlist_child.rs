@@ -6,12 +6,10 @@ pub fn impl_playlist_child(name: &Ident, generics: &Generics) -> proc_macro2::To
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     quote! {
-        use std::sync::Arc;
-
         #[async_trait::async_trait]
         impl #impl_generics PlaylistChild for #name #ty_generics #where_clause{
             /// current_title returns the title of current playing song
-            async fn current_title(&mut self) -> anyhow::Result<Arc<String>> {
+            async fn current_title(&mut self) -> anyhow::Result<std::sync::Arc<String>> {
                 self.init().await?;
                 if let Some(inner) = &mut self.inner {
                     inner.current_title().await
@@ -21,7 +19,7 @@ pub fn impl_playlist_child(name: &Ident, generics: &Generics) -> proc_macro2::To
             }
 
             /// Artist returns the artist which is currently playing.
-            async fn current_artist(&mut self) -> anyhow::Result<Arc<String>> {
+            async fn current_artist(&mut self) -> anyhow::Result<std::sync::Arc<String>> {
                 self.init().await?;
                 if let Some(inner) = &mut self.inner {
                     inner.current_artist().await
@@ -31,7 +29,7 @@ pub fn impl_playlist_child(name: &Ident, generics: &Generics) -> proc_macro2::To
             }
 
             /// return the current content type of the playlist
-            async fn content_type(&mut self) -> anyhow::Result<Arc<String>> {
+            async fn content_type(&mut self) -> anyhow::Result<std::sync::Arc<String>> {
                 self.init().await?;
                 if let Some(inner) = &mut self.inner {
                     inner.content_type().await

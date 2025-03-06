@@ -19,6 +19,7 @@ pub fn init_lazy_playlist_child(
                     match name.to_string().as_str() {
                         "inner" => quote! {},
                         "played" => quote! {},
+                        "current_index" => quote! {},
                         "byte_per_millisecond" => quote! {},
                         "title" => quote! {},
                         "artist" => quote! {},
