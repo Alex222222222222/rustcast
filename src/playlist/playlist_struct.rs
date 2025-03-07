@@ -43,7 +43,7 @@ impl Playlist {
     pub async fn new(name: String, child: Arc<Mutex<dyn PlaylistChild>>) -> Self {
         let frame = PreparedFrame {
             frame: Bytes::new(),
-            duration: 0,
+            duration: 0.0,
             id: CONTEXT.get_id().await,
             next: Arc::new(Mutex::new(None)),
         };
@@ -97,15 +97,6 @@ impl Playlist {
 
         let mut self_oldest_frame_id = self.get_self_oldest_frame_id().await;
 
-        debug!(
-            "update_oldest_frame_by_db_smallest_frame_id: db_smallest_frame_id: {}, self_oldest_frame_id: {}",
-            db_smallest_frame_id, self_oldest_frame_id
-        );
-
-        debug!(
-            "update_oldest_frame_by_db_smallest_frame_id: db_smallest_frame_id: {}, self_oldest_frame_id: {}",
-            db_smallest_frame_id, self_oldest_frame_id
-        );
         while db_smallest_frame_id > self_oldest_frame_id {
             if !self.advance_oldest_frame().await {
                 break;
@@ -118,13 +109,11 @@ impl Playlist {
 
     async fn advance_oldest_frame(&self) -> bool {
         let mut oldest_prepared_frames = self.oldest_prepared_frames.lock().await;
-        debug!("is unique: {:?}", oldest_prepared_frames.frame.is_unique());
         if !(oldest_prepared_frames.frame.is_unique() || oldest_prepared_frames.frame.is_empty()) {
             return false;
         }
         oldest_prepared_frames.frame.clear();
         let next = oldest_prepared_frames.get_next().await;
-        debug!("advance oldest frame: {:?}", oldest_prepared_frames.id);
         if let Some(next) = next {
             *oldest_prepared_frames = next;
             return true;
@@ -138,17 +127,17 @@ impl Playlist {
     }
 
     /// current_title returns the title of current playing song
-    pub async fn current_title(&self) -> anyhow::Result<Arc<String>> {
+    pub async fn current_title(&self) -> anyhow::Result<Option<Arc<String>>> {
         self.child.lock().await.current_title().await
     }
 
     ///    Artist returns the artist which is currently playing.
-    pub async fn current_artist(&self) -> anyhow::Result<Arc<String>> {
+    pub async fn current_artist(&self) -> anyhow::Result<Option<Arc<String>>> {
         self.child.lock().await.current_artist().await
     }
 
     /// return the current content type of the playlist
-    pub async fn content_type(&self) -> anyhow::Result<Arc<String>> {
+    pub async fn content_type(&self) -> anyhow::Result<Option<Arc<String>>> {
         self.child.lock().await.content_type().await
     }
 
@@ -165,7 +154,6 @@ impl Playlist {
     /// do nothing if the playlist is finished
     /// or the playlist already has the next frame
     pub async fn prepare_frame(&self) -> anyhow::Result<()> {
-        debug!("prepare frame for playlist: {:?}", self.name);
         if self.is_finished().await? {
             debug!("playlist is finished: {:?}", self.name);
             return Ok(());
@@ -173,7 +161,6 @@ impl Playlist {
 
         let newest_prepared_frames = self.newest_prepared_frames.lock().await;
         if newest_prepared_frames.has_next().await {
-            debug!("playlist already has next frame: {:?}", self.name);
             return Ok(());
         }
         drop(newest_prepared_frames);
@@ -187,8 +174,14 @@ impl Playlist {
                     return Ok(());
                 }
             };
-            let byte_per_millisecond = child.byte_per_millisecond().await?;
-            let duration = frame.len() as u128 / byte_per_millisecond;
+            let byte_per_millisecond = match child.byte_per_millisecond().await? {
+                Some(byte_per_millisecond) => byte_per_millisecond,
+                None => {
+                    // the child is finished
+                    return Ok(());
+                }
+            };
+            let duration = frame.len() as f64 / byte_per_millisecond;
             drop(child);
 
             let prepared_frame = PreparedFrame {
@@ -214,7 +207,7 @@ impl Playlist {
 pub struct PreparedFrame {
     pub frame: Bytes,
     /// duration of the frame in milliseconds calculated from the frame size and bitrate
-    pub duration: u128,
+    pub duration: f64,
     /// id of the frame that is used to track the order of the frames
     /// should be monotonically increasing
     pub id: usize,

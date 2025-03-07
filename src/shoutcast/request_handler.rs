@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::SinkExt;
 use http::Request;
-use log::debug;
+use log::{debug, error};
 use std::{sync::Arc, vec};
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
@@ -47,10 +47,9 @@ macro_rules! impl_send2_sink {
             /// Writing a String to the TcpStream, in the ShoutCast protocol,
             /// we do not need to write a whole http response, just the body.
             impl tokio_util::codec::Encoder<$t> for super::Http {
-                type Error = std::io::Error;
+                type Error = anyhow::Error;
 
-                fn encode(&mut self, i: $t, dst: &mut bytes::BytesMut) -> std::io::Result<()> {
-                    debug!("dst len: {}", dst.len());
+                fn encode(&mut self, i: $t, dst: &mut bytes::BytesMut) -> anyhow::Result<()> {
                     dst.extend_from_slice(i.as_bytes());
                     Ok(())
                 }
@@ -72,9 +71,9 @@ impl_send2_sink! { String, Arc<String>, &'static str }
 /// Writing a String to the TcpStream, in the ShoutCast protocol,
 /// we do not need to write a whole http response, just the body.
 impl tokio_util::codec::Encoder<Bytes> for super::Http {
-    type Error = std::io::Error;
+    type Error = anyhow::Error;
 
-    fn encode(&mut self, i: Bytes, dst: &mut bytes::BytesMut) -> std::io::Result<()> {
+    fn encode(&mut self, i: Bytes, dst: &mut bytes::BytesMut) -> anyhow::Result<()> {
         dst.extend_from_slice(&i);
         Ok(())
     }
@@ -83,7 +82,6 @@ impl tokio_util::codec::Encoder<Bytes> for super::Http {
 impl Send2Sink<Bytes> for MySink {
     async fn send(&self, data: Bytes) -> anyhow::Result<()> {
         let s = self.0.lock();
-        debug!("lock my sink");
         s.await.send(data).await?;
         Ok(())
     }
@@ -126,35 +124,21 @@ impl RequestHandler {
             frame_stream: &mut PlaylistFrameStream,
             bytes_before_next_meta_data: &mut usize,
         ) -> anyhow::Result<bool> {
-            debug!("Get next frame, listener_id: {}", frame_stream.listener_id);
             let frame = match frame_stream.next().await {
                 Some(frame) => frame?,
                 None => {
-                    debug!(
-                        "playlist finished, listener_id: {}",
-                        frame_stream.listener_id
-                    );
                     return Ok(true);
                 }
             };
-            debug!(
-                "log current frame, listener_id: {}",
-                frame_stream.listener_id
-            );
+
             handler
                 .playlist
                 .log_current_frame(frame_stream.listener_id, frame.id)
                 .await?;
 
-            debug!("write frame, listener_id: {}", frame_stream.listener_id);
             *bytes_before_next_meta_data = handler
                 .write_frame(frame.frame, *bytes_before_next_meta_data)
                 .await?;
-
-            debug!(
-                "frame written successfully, listener_id: {}",
-                frame_stream.listener_id
-            );
 
             Ok(false)
         }
@@ -163,7 +147,7 @@ impl RequestHandler {
             let e =
                 write_next_frame(self, &mut frame_stream, &mut bytes_before_next_meta_data).await;
             if let Err(e) = e {
-                debug!("error writing frame: {:?}", e);
+                error!("error writing frame: {:?}", e);
                 self.playlist
                     .delete_listener_data(frame_stream.listener_id)
                     .await?;
@@ -182,11 +166,19 @@ impl RequestHandler {
     }
     /// writeStreamStartResponse writes the start response to the client.
     async fn write_stream_start_response(&mut self) -> anyhow::Result<()> {
+        let content_type = match self.playlist.content_type().await? {
+            Some(content_type) => content_type,
+            None => {
+                debug!("content type is none");
+                return Err(anyhow::anyhow!("content type is none"));
+            }
+        };
+
         debug!("write stream start response");
         self.sink.send("ICY 200 OK\r\n").await?;
 
         self.sink.send("Content-Type: ").await?;
-        self.sink.send(self.playlist.content_type().await?).await?;
+        self.sink.send(content_type).await?;
         self.sink.send("\r\n").await?;
 
         self.sink.send("icy-name: ").await?;
@@ -212,37 +204,43 @@ impl RequestHandler {
         frame: Bytes,
         bytes_before_next_meta_data: usize,
     ) -> anyhow::Result<usize> {
-        debug!("write frame");
         let mut frame = frame;
         let mut bytes_before_next_meta_data = bytes_before_next_meta_data;
         while bytes_before_next_meta_data < frame.len() {
-            debug!("split frame");
             let first = frame.split_to(bytes_before_next_meta_data);
             self.sink.send(first).await?;
-            debug!("write meta data");
             self.write_stream_meta_data().await?;
             bytes_before_next_meta_data = META_DATA_INTERVAL;
         }
 
-        debug!("send frame");
         let len = frame.len();
         if len > 0 {
             self.sink.send(frame).await?;
             bytes_before_next_meta_data -= len;
         }
 
-        debug!("frame written successfully");
         Ok(bytes_before_next_meta_data)
     }
 
     /// writeStreamMetaData writes meta data information into the stream.
     async fn write_stream_meta_data(&mut self) -> anyhow::Result<()> {
-        // todo optimize this
-        let stream_title = format!(
-            "{} - {}",
-            self.playlist.current_title().await?,
-            self.playlist.current_artist().await?
-        );
+        let current_title = match self.playlist.current_title().await? {
+            Some(title) => title,
+            None => {
+                debug!("current title is none");
+                Arc::new("Unknown Track".to_string())
+            }
+        };
+        let current_artist = match self.playlist.current_artist().await? {
+            Some(artist) => artist,
+            None => {
+                debug!("current artist is none");
+                Arc::new("Unknown Artist".to_string())
+            }
+        };
+
+        // TODO optimize this
+        let stream_title = format!("{} - {}", current_artist, current_title);
         let stream_title = if stream_title.len() > MAX_META_DATA_SIZE - 15 {
             // Truncate stream title if necessary
             format!(

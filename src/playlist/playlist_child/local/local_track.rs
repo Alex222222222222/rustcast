@@ -49,7 +49,7 @@ struct MetaData {
     content_type: Arc<String>,
     title: Option<String>,
     artist: Option<String>,
-    byte_per_millisecond: u128,
+    byte_per_millisecond: f64,
 }
 
 fn get_meta_data_from_file(path: &str) -> anyhow::Result<MetaData> {
@@ -92,14 +92,14 @@ fn get_meta_data_from_file(path: &str) -> anyhow::Result<MetaData> {
     debug!("got file size: {}", size);
 
     // calculate the bitrate
-    let byte_per_millisecond = size / duration as u64 + 1;
+    let byte_per_millisecond = (size + 1) as f64 / duration as f64;
     debug!("byte per millisecond: {}", byte_per_millisecond);
 
     Ok(MetaData {
         content_type,
         title,
         artist,
-        byte_per_millisecond: byte_per_millisecond as u128,
+        byte_per_millisecond: byte_per_millisecond,
     })
 }
 
@@ -111,7 +111,7 @@ pub struct LocalFileTrackInner {
     content_type: Arc<String>,
     repeat: bool,
     played: bool,
-    byte_per_millisecond: u128,
+    byte_per_millisecond: f64,
     current_stream: Option<Box<dyn AsyncRead + Send + Sync + Unpin>>,
 }
 
@@ -167,54 +167,68 @@ impl LocalFileTrackInner {
 
 #[async_trait]
 impl PlaylistChild for LocalFileTrackInner {
-    async fn current_title(&mut self) -> anyhow::Result<Arc<String>> {
-        Ok(self.title.clone())
+    async fn current_title(&mut self) -> anyhow::Result<Option<Arc<String>>> {
+        if self.played && !self.repeat {
+            return Ok(None);
+        }
+        Ok(Some(self.title.clone()))
     }
 
-    async fn current_artist(&mut self) -> anyhow::Result<Arc<String>> {
-        Ok(self.artist.clone())
+    async fn current_artist(&mut self) -> anyhow::Result<Option<Arc<String>>> {
+        if self.played && !self.repeat {
+            return Ok(None);
+        }
+        Ok(Some(self.artist.clone()))
     }
 
-    async fn content_type(&mut self) -> anyhow::Result<Arc<String>> {
-        Ok(self.content_type.clone())
+    async fn content_type(&mut self) -> anyhow::Result<Option<Arc<String>>> {
+        if self.played && !self.repeat {
+            return Ok(None);
+        }
+        Ok(Some(self.content_type.clone()))
     }
 
-    async fn byte_per_millisecond(&mut self) -> anyhow::Result<u128> {
-        Ok(self.byte_per_millisecond)
+    async fn byte_per_millisecond(&mut self) -> anyhow::Result<Option<f64>> {
+        if self.played && !self.repeat {
+            return Ok(None);
+        }
+        Ok(Some(self.byte_per_millisecond))
     }
 
     async fn next_frame(&mut self) -> anyhow::Result<Option<bytes::Bytes>> {
-        if self.played && !self.repeat {
-            self.current_stream = None;
-            return Ok(None);
-        }
-
-        if self.current_stream.is_none() {
-            let stream = tokio::fs::File::open(&self.path).await?;
-            self.current_stream = Some(Box::new(stream));
-        }
-
-        let stream = self.current_stream.as_mut().unwrap();
-        let mut buf = vec![0; DEFAULT_FRAME_SIZE];
-        let mut read = stream.read(&mut buf).await?;
-        if read == 0 {
-            self.played = true;
-            if !self.repeat {
+        loop {
+            if self.played && !self.repeat {
                 self.current_stream = None;
                 return Ok(None);
             }
 
-            let mut stream = tokio::fs::File::open(&self.path).await?;
-            read = stream.read(&mut buf).await?;
+            if self.current_stream.is_none() {
+                let stream = tokio::fs::File::open(&self.path).await?;
+                self.current_stream = Some(Box::new(stream));
+            }
+
+            let mut stream = self.current_stream.take().unwrap();
+            let mut buf = vec![0; DEFAULT_FRAME_SIZE];
+            let mut read = stream.read(&mut buf).await?;
             if read == 0 {
                 self.current_stream = None;
-                anyhow::bail!("failed to read from file: {}", self.path);
-            }
-            self.current_stream = Some(Box::new(stream));
-        }
+                self.played = true;
+                if !self.repeat {
+                    return Ok(None);
+                }
 
-        let frame = bytes::Bytes::from(buf).slice(0..read);
-        Ok(Some(frame))
+                stream = Box::new(tokio::fs::File::open(&self.path).await?);
+                read = stream.read(&mut buf).await?;
+                if read == 0 {
+                    self.current_stream = None;
+                    anyhow::bail!("failed to read from file: {}", self.path);
+                }
+            }
+
+            let frame = bytes::Bytes::from(buf).slice(0..read);
+            self.current_stream = Some(stream);
+            return Ok(Some(frame));
+        }
     }
 
     async fn is_finished(&mut self) -> anyhow::Result<bool> {

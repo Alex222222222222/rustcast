@@ -6,26 +6,32 @@ use async_trait::async_trait;
 mod impl_playlist_child_by_redirect_to_self_variable;
 
 mod local;
+mod remote;
 mod playlist_child_list;
 
 use bytes::Bytes;
 // re-export the local module
 pub use local::*;
+pub use remote::*;
 pub use playlist_child_list::PlaylistChildList;
 
 #[async_trait]
 pub trait PlaylistChild: Sync + Send {
     /// current_title returns the title of current playing song
-    async fn current_title(&mut self) -> anyhow::Result<Arc<String>>;
+    /// return none if the playlist is finished
+    async fn current_title(&mut self) -> anyhow::Result<Option<Arc<String>>>;
 
     /// Artist returns the artist which is currently playing.
-    async fn current_artist(&mut self) -> anyhow::Result<Arc<String>>;
+    /// return none if the playlist is finished
+    async fn current_artist(&mut self) -> anyhow::Result<Option<Arc<String>>>;
 
     /// return the current content type of the playlist
-    async fn content_type(&mut self) -> anyhow::Result<Arc<String>>;
+    /// return none if the playlist is finished
+    async fn content_type(&mut self) -> anyhow::Result<Option<Arc<String>>>;
 
     /// return the current byte_per_millisecond
-    async fn byte_per_millisecond(&mut self) -> anyhow::Result<u128>;
+    /// return none if the playlist is finished
+    async fn byte_per_millisecond(&mut self) -> anyhow::Result<Option<f64>>;
 
     /// return a stream representing the current track, and the byte_per_millisecond
     /// the stream should be closed when the track is finished
