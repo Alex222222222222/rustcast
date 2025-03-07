@@ -9,7 +9,7 @@ mod init_lazy_playlist_child;
 mod new_lazy_playlist_child;
 mod struct_lazy_playlist_child;
 
-const IGNORED_FIELDS: [&str; 8] = [
+const IGNORED_FIELDS: [&str; 9] = [
     "inner",
     "played",
     "current_index",
@@ -18,6 +18,7 @@ const IGNORED_FIELDS: [&str; 8] = [
     "artist",
     "content_type",
     "current_stream",
+    "p",
 ];
 
 #[proc_macro_derive(LazyPlaylistChild, attributes(custom_input_type))]

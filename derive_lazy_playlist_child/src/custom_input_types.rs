@@ -21,6 +21,8 @@ pub struct CustomAdditionalInput {
     pub name: syn::Ident,
     pub input_type: syn::Type,
     pub default: syn::Expr,
+    #[darling(default)]
+    pub optional: bool,
 }
 
 pub struct CustomInputTypesMap {

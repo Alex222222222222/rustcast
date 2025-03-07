@@ -8,9 +8,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use tokio::io::{AsyncRead, AsyncReadExt};
 
-use crate::playlist::DEFAULT_FRAME_SIZE;
-
-use super::PlaylistChild;
+use crate::playlist::{DEFAULT_FRAME_SIZE, PlaylistChild};
 
 /// use Arc to share the same content between threads
 static FILE_EXT_CONTENT_TYPES: Lazy<HashMap<String, Arc<String>>> = Lazy::new(|| {

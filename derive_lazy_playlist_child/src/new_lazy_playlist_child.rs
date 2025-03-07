@@ -66,9 +66,20 @@ fn new_lazy_playlist_child_constructor(
     };
 
     let recursive2 = custom_types.additional_inputs.iter().map(
-        |CustomAdditionalInput { name, default, .. }| {
-            quote! {
-                #name: #name.unwrap_or(#default),
+        |CustomAdditionalInput {
+             name,
+             default,
+             optional,
+             ..
+         }| {
+            if *optional {
+                quote_spanned! {name.span()=>
+                    #name: Some(#name),
+                }
+            } else {
+                quote! {
+                    #name: #name.unwrap_or(#default),
+                }
             }
         },
     );
@@ -121,10 +132,19 @@ fn new_lazy_playlist_child_input(
     };
     let recursive2 = custom_types.additional_inputs.iter().map(
         |CustomAdditionalInput {
-             name, input_type, ..
+             name,
+             input_type,
+             optional,
+             ..
          }| {
-            quote! {
-                #name: Option<#input_type>,
+            if *optional {
+                quote_spanned! {name.span()=>
+                    #name: #input_type,
+                }
+            } else {
+                quote! {
+                    #name: Option<#input_type>,
+                }
             }
         },
     );

@@ -3,7 +3,8 @@ mod playlist_child;
 mod playlist_frame_stream;
 mod playlist_struct;
 
-pub use playlist_child::{LocalFileTrack, PlaylistChild};
+// re-export the modules
+pub use playlist_child::*;
 pub use playlist_frame_stream::PlaylistFrameStream;
 pub use playlist_struct::{Playlist, PreparedFrame};
 

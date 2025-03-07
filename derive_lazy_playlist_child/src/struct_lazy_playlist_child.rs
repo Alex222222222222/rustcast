@@ -2,7 +2,10 @@ use proc_macro2::Ident;
 use quote::{quote, quote_spanned};
 use syn::{Data, Generics};
 
-use crate::{custom_input_types::{CustomAdditionalInput, CustomInputTypesMap}, IGNORED_FIELDS};
+use crate::{
+    IGNORED_FIELDS,
+    custom_input_types::{CustomAdditionalInput, CustomInputTypesMap},
+};
 
 pub fn struct_lazy_playlist_child(
     inner_name: &Ident,
@@ -46,23 +49,35 @@ pub fn struct_lazy_playlist_child(
         },
         _ => panic!("Only struct is supported"),
     };
-    let recursive2 = custom_types
-        .additional_inputs
-        .iter()
-        .map(|CustomAdditionalInput { name, input_type, .. }| {
-            quote! {
-                #name: #input_type,
+    let recursive2 = custom_types.additional_inputs.iter().map(
+        |CustomAdditionalInput {
+             name,
+             input_type,
+             optional,
+             ..
+         }| {
+            if *optional {
+                quote_spanned! {name.span()=>
+                    #name: Option<#input_type>,
+                }
+            } else {
+                quote! {
+                    #name: #input_type,
+                }
             }
-        });
+        },
+    );
     let recursive = quote! {
         #recursive
         #(#recursive2)*
     };
 
+    let (_, ty_generics, where_clause) = generics.split_for_impl();
+
     quote! {
         // The generated struct.
-        pub struct #name #generics {
-            inner: Option<#inner_name>,
+        pub struct #name #generics #where_clause {
+            inner: Option< #inner_name #ty_generics>,
             #recursive
         }
     }

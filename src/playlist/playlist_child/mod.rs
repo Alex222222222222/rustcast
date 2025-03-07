@@ -2,13 +2,16 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-mod local_track;
-mod local_tracks;
-mod local_folder;
+#[macro_use]
+mod impl_playlist_child_by_redirect_to_self_variable;
+
+mod local;
+mod playlist_child_list;
 
 use bytes::Bytes;
-pub use local_track::LocalFileTrack;
-pub use local_tracks::LocalFileTrackList;
+// re-export the local module
+pub use local::*;
+pub use playlist_child_list::PlaylistChildList;
 
 #[async_trait]
 pub trait PlaylistChild: Sync + Send {

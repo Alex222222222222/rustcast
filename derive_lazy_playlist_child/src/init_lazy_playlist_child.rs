@@ -32,13 +32,15 @@ pub fn init_lazy_playlist_child(
                         "repeat" => quote_spanned! {name.span()=>
                             self.#name,
                         },
-                        _ => quote_spanned! {name.span()=>
-                            match self.#name.take() {
-                                Some(d) => d,
-                                // TODO find a way to turn this into static error
-                                None => return Err(anyhow::anyhow!(format!("{} is none", stringify!(#name)))),
-                            },
-                        },
+                        _ => {
+                            let err = format!("{} is none", name);
+                            quote_spanned! {name.span()=>
+                                match self.#name.take() {
+                                    Some(d) => d,
+                                    None => return Err(anyhow::anyhow!(#err)),
+                                },
+                            }
+                        }
                     }
                 });
                 quote! {
@@ -49,15 +51,23 @@ pub fn init_lazy_playlist_child(
         },
         _ => panic!("Only struct is supported"),
     };
-    let recursive2 =
-        custom_types
-            .additional_inputs
-            .iter()
-            .map(|CustomAdditionalInput { name, .. }| {
+    let recursive2 = custom_types.additional_inputs.iter().map(
+        |CustomAdditionalInput { name, optional, .. }| {
+            if *optional {
+                let err = format!("{} is none", name);
+                quote_spanned! {name.span()=>
+                    match self.#name.take() {
+                        Some(d) => d,
+                        None => return Err(anyhow::anyhow!(#err)),
+                    },
+                }
+            } else {
                 quote! {
                     self.#name,
                 }
-            });
+            }
+        },
+    );
     let recursive = quote! {
         #recursive
         #(#recursive2)*

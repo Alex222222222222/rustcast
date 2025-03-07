@@ -40,8 +40,12 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "db")]
     let db = db::DB::new().await?;
 
-    let local_track =
-        playlist::LocalFileTrack::new("一样的夏天 - 孙燕姿.mp3".to_string(), Some(true)).await?;
+    let local_track = playlist::LocalFolder::new(
+        "/Users/zifanhua/Documents/Music/ist1/".to_string(),
+        Some(true),
+        Some(true),
+    )
+    .await?;
 
     let playlist =
         playlist::Playlist::new("playlist".to_string(), Arc::new(Mutex::new(local_track))).await;
