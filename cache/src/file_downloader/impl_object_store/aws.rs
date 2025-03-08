@@ -1,0 +1,170 @@
+use std::{pin::Pin, sync::Arc};
+
+use async_trait::async_trait;
+use bytes::Bytes;
+use futures::{Stream, StreamExt};
+use object_store::{
+    ObjectStore,
+    aws::{AmazonS3, AmazonS3Builder, AmazonS3ConfigKey},
+};
+use sha2::Digest;
+
+use crate::{Error, FileDownloader, FileMetadata};
+
+use super::{CLIENT_CONFIG_KEYS, object_store_config_key_to_string};
+
+static AMAZON_S3_CONFIG_KEYS: &[AmazonS3ConfigKey; 19] = &[
+    AmazonS3ConfigKey::AccessKeyId,
+    AmazonS3ConfigKey::SecretAccessKey,
+    AmazonS3ConfigKey::Region,
+    AmazonS3ConfigKey::DefaultRegion,
+    AmazonS3ConfigKey::Bucket,
+    AmazonS3ConfigKey::Endpoint,
+    AmazonS3ConfigKey::Token,
+    AmazonS3ConfigKey::ImdsV1Fallback,
+    AmazonS3ConfigKey::VirtualHostedStyleRequest,
+    AmazonS3ConfigKey::UnsignedPayload,
+    AmazonS3ConfigKey::Checksum,
+    AmazonS3ConfigKey::MetadataEndpoint,
+    AmazonS3ConfigKey::ContainerCredentialsRelativeUri,
+    AmazonS3ConfigKey::CopyIfNotExists,
+    AmazonS3ConfigKey::ConditionalPut,
+    AmazonS3ConfigKey::SkipSignature,
+    AmazonS3ConfigKey::DisableTagging,
+    AmazonS3ConfigKey::S3Express,
+    AmazonS3ConfigKey::RequestPayer,
+    // And a list of AmazonS3ConfigKey::Client(CLIENT_CONFIG_KEYS),
+];
+
+fn amazon_s3_config_key_to_string(key: &AmazonS3ConfigKey) -> &'static str {
+    match key {
+        AmazonS3ConfigKey::AccessKeyId => "AccessKeyId",
+        AmazonS3ConfigKey::SecretAccessKey => "SecretAccessKey",
+        AmazonS3ConfigKey::Region => "Region",
+        AmazonS3ConfigKey::DefaultRegion => "DefaultRegion",
+        AmazonS3ConfigKey::Bucket => "Bucket",
+        AmazonS3ConfigKey::Endpoint => "Endpoint",
+        AmazonS3ConfigKey::Token => "Token",
+        AmazonS3ConfigKey::ImdsV1Fallback => "ImdsV1Fallback",
+        AmazonS3ConfigKey::VirtualHostedStyleRequest => "VirtualHostedStyleRequest",
+        AmazonS3ConfigKey::UnsignedPayload => "UnsignedPayload",
+        AmazonS3ConfigKey::Checksum => "Checksum",
+        AmazonS3ConfigKey::MetadataEndpoint => "MetadataEndpoint",
+        AmazonS3ConfigKey::ContainerCredentialsRelativeUri => "ContainerCredentialsRelativeUri",
+        AmazonS3ConfigKey::CopyIfNotExists => "CopyIfNotExists",
+        AmazonS3ConfigKey::ConditionalPut => "ConditionalPut",
+        AmazonS3ConfigKey::SkipSignature => "SkipSignature",
+        AmazonS3ConfigKey::DisableTagging => "DisableTagging",
+        AmazonS3ConfigKey::S3Express => "S3Express",
+        AmazonS3ConfigKey::RequestPayer => "RequestPayer",
+        AmazonS3ConfigKey::Client(c) => object_store_config_key_to_string(c),
+        &_ => "Unknown",
+    }
+}
+
+pub struct AwsS3Downloader {
+    object_store: Arc<AmazonS3>,
+    hash: Bytes,
+}
+
+impl AwsS3Downloader {
+    pub fn new(builder: AmazonS3Builder) -> Result<Self, Error> {
+        let mut hasher = sha2::Sha256::new();
+        hasher.update("aws:".as_bytes());
+        // iter over AMAZON_S3_CONFIG_KEYS and set the value from the builder
+        for key in AMAZON_S3_CONFIG_KEYS.iter() {
+            let v = builder.get_config_value(key);
+            if let Some(value) = v {
+                hasher.update(amazon_s3_config_key_to_string(key).as_bytes());
+                hasher.update(":".as_bytes());
+                hasher.update(value.as_bytes());
+                hasher.update(",".as_bytes());
+            }
+        }
+        for key in CLIENT_CONFIG_KEYS.iter() {
+            let v = builder.get_config_value(&AmazonS3ConfigKey::Client(*key));
+            if let Some(value) = v {
+                hasher.update(object_store_config_key_to_string(key).as_bytes());
+                hasher.update(":".as_bytes());
+                hasher.update(value.as_bytes());
+                hasher.update(",".as_bytes());
+            }
+        }
+
+        // TODO optimize this
+        let hash = hasher.finalize();
+        let hash = Bytes::copy_from_slice(hash.as_slice());
+        let object_store = builder.build()?;
+        Ok(Self {
+            object_store: Arc::new(object_store),
+            hash,
+        })
+    }
+}
+
+#[async_trait]
+impl FileDownloader for AwsS3Downloader {
+    async fn get_file(
+        &self,
+        path: &str,
+    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin>, Error> {
+        let path = object_store::path::Path::from(path);
+        match self.object_store.get(&path).await {
+            Ok(file) => Ok(Box::new(ObjectStoreFileStream2FileProviderStream(
+                file.into_stream(),
+            ))),
+            Err(object_store::Error::NotFound { .. }) => {
+                Err(Error::ResourceNotFound(path.to_string()))
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    async fn get_meta(&self, path: &str) -> Result<FileMetadata, Error> {
+        let path = object_store::path::Path::from(path);
+        match self.object_store.head(&path).await {
+            Ok(meta) => Ok(FileMetadata {
+                size: meta.size,
+                location: meta.location.to_string(),
+                last_modified: chrono::DateTime::from(meta.last_modified),
+                e_tag: meta.e_tag,
+            }),
+            Err(object_store::Error::NotFound { .. }) => {
+                Err(Error::ResourceNotFound(path.to_string()))
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    fn hash(&self) -> Bytes {
+        self.hash.clone()
+    }
+}
+
+struct ObjectStoreFileStream2FileProviderStream(
+    Pin<
+        Box<
+            (
+                dyn futures::Stream<Item = Result<bytes::Bytes, object_store::Error>>
+                    + std::marker::Send
+                    + 'static
+            ),
+        >,
+    >,
+);
+
+impl Stream for ObjectStoreFileStream2FileProviderStream {
+    type Item = Result<bytes::Bytes, Error>;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        match self.0.poll_next_unpin(cx) {
+            std::task::Poll::Ready(Some(Ok(bytes))) => std::task::Poll::Ready(Some(Ok(bytes))),
+            std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Some(Err(e.into()))),
+            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
+            std::task::Poll::Pending => std::task::Poll::Pending,
+        }
+    }
+}
