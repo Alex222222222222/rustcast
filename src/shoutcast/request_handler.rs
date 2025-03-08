@@ -119,51 +119,24 @@ impl RequestHandler {
         let mut frame_stream = PlaylistFrameStream::new(self.playlist.clone()).await;
         let mut bytes_before_next_meta_data = META_DATA_INTERVAL;
 
-        async fn write_next_frame(
-            handler: &mut RequestHandler,
-            frame_stream: &mut PlaylistFrameStream,
-            bytes_before_next_meta_data: &mut usize,
-        ) -> anyhow::Result<bool> {
+        loop {
             let frame = match frame_stream.next().await {
                 Some(frame) => frame?,
                 None => {
-                    return Ok(true);
+                    return Ok(());
                 }
             };
 
-            handler
-                .playlist
+            self.playlist
                 .log_current_frame(frame_stream.listener_id, frame.id)
+                .await;
+
+            bytes_before_next_meta_data = self
+                .write_frame(frame.frame, bytes_before_next_meta_data)
                 .await?;
-
-            *bytes_before_next_meta_data = handler
-                .write_frame(frame.frame, *bytes_before_next_meta_data)
-                .await?;
-
-            Ok(false)
         }
-
-        loop {
-            let e =
-                write_next_frame(self, &mut frame_stream, &mut bytes_before_next_meta_data).await;
-            if let Err(e) = e {
-                error!("error writing frame: {:?}", e);
-                self.playlist
-                    .delete_listener_data(frame_stream.listener_id)
-                    .await?;
-                return Err(e);
-            }
-            if let Ok(true) = e {
-                break;
-            }
-        }
-
-        self.playlist
-            .delete_listener_data(frame_stream.listener_id)
-            .await?;
-
-        Ok(())
     }
+
     /// writeStreamStartResponse writes the start response to the client.
     async fn write_stream_start_response(&mut self) -> anyhow::Result<()> {
         let content_type = match self.playlist.content_type().await? {

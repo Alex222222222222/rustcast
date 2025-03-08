@@ -57,7 +57,7 @@ impl Playlist {
     }
 
     /// delete a listener from the playlist
-    pub async fn delete_listener_data(&self, listener_id: usize) -> anyhow::Result<()> {
+    pub async fn delete_listener_data(&self, listener_id: usize) {
         let mut listener_frame_data_db = self.listener_frame_data_db.lock().await;
         listener_frame_data_db.delete_listener_data(listener_id);
         drop(listener_frame_data_db);
@@ -66,11 +66,7 @@ impl Playlist {
     }
 
     /// log the listener current frame
-    pub async fn log_current_frame(
-        &self,
-        listener_id: usize,
-        frame_id: usize,
-    ) -> anyhow::Result<()> {
+    pub async fn log_current_frame(&self, listener_id: usize, frame_id: usize) {
         let mut listener_frame_data_db = self.listener_frame_data_db.lock().await;
         listener_frame_data_db.log_current_frame(listener_id, frame_id);
         drop(listener_frame_data_db);
@@ -79,20 +75,20 @@ impl Playlist {
     }
 
     /// get the smallest frame id in ListenerFrame
-    async fn get_smallest_frame_id(&self) -> anyhow::Result<Option<usize>> {
+    async fn get_smallest_frame_id(&self) -> Option<usize> {
         let listener_frame_data_db = self.listener_frame_data_db.lock().await;
-        Ok(listener_frame_data_db.get_smallest_frame_id().await)
+        listener_frame_data_db.get_smallest_frame_id().await
     }
 
-    async fn update_oldest_frame_by_db_smallest_frame_id(&self) -> anyhow::Result<()> {
-        while self.get_smallest_frame_id().await?.is_none() {
+    async fn update_oldest_frame_by_db_smallest_frame_id(&self) {
+        while self.get_smallest_frame_id().await.is_none() {
             if !self.advance_oldest_frame().await {
                 break;
             }
         }
-        let db_smallest_frame_id = match self.get_smallest_frame_id().await? {
+        let db_smallest_frame_id = match self.get_smallest_frame_id().await {
             Some(id) => id,
-            None => return Ok(()),
+            None => return,
         };
 
         let mut self_oldest_frame_id = self.get_self_oldest_frame_id().await;
@@ -103,8 +99,6 @@ impl Playlist {
             }
             self_oldest_frame_id = self.get_self_oldest_frame_id().await;
         }
-
-        Ok(())
     }
 
     async fn advance_oldest_frame(&self) -> bool {

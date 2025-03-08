@@ -11,8 +11,10 @@ mod db;
 
 mod playlist;
 mod shoutcast;
+mod file_provider;
 
 pub use context::CONTEXT;
+pub use file_provider::*;
 
 #[cfg(feature = "db")]
 pub use db::DB;

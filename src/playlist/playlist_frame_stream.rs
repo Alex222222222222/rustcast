@@ -25,6 +25,15 @@ pub struct PlaylistFrameStream {
     waiting_pending_future: Option<Pin<Box<dyn futures::Future<Output = ()> + Send>>>,
 }
 
+impl Drop for PlaylistFrameStream {
+    fn drop(&mut self) {
+        // delete listener data when the stream is dropped
+        let listener_id = self.listener_id;
+        let playlist = self.playlist.clone();
+        tokio::spawn(async move { playlist.delete_listener_data(listener_id).await });
+    }
+}
+
 impl PlaylistFrameStream {
     pub async fn new(playlist: Arc<Playlist>) -> Self {
         let current_stream_frame = playlist.get_oldest_prepared_frames().await;
