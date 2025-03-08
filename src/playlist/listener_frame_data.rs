@@ -1,7 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
 
-use log::debug;
-
 pub struct ListenerFrameData {
     /// listener id to frame id
     data: HashMap<usize, usize>,

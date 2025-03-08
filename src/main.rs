@@ -34,9 +34,6 @@ async fn main() -> anyhow::Result<()> {
         .apply()
         .unwrap();
 
-    #[cfg(feature = "db")]
-    let db = db::DB::new().await?;
-
     let local_track = playlist::LocalFolder::new(
         "/Users/zifanhua/Documents/Music/ist1/".to_string(),
         Some(true),

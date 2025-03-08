@@ -8,6 +8,9 @@ use log::{debug, error};
 
 use super::PlaylistChild;
 
+type InitFn<O> =
+    fn(O) -> Pin<Box<dyn Future<Output = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>;
+
 /// PlaylistChildList is a struct that contains a list of
 /// playlist children, the current index, whether to repeat
 /// the playlist, whether to shuffle the playlist, and whether
@@ -16,9 +19,7 @@ use super::PlaylistChild;
 #[custom_input_type(input_type(name = "tracks", input_type = "Vec<O>"))]
 #[custom_input_type(additional_input(
     name = "init",
-    input_type = "Option<
-            fn(O) -> Pin<Box<dyn Future<Output = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>,
-        >",
+    input_type = "Option<InitFn<O>>",
     default = "None",
     optional = true
 ))]
@@ -48,9 +49,7 @@ where
         tracks: Vec<O>,
         repeat: bool,
         shuffle: bool,
-        init: Option<
-            fn(O) -> Pin<Box<dyn Future<Output = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>,
-        >,
+        init: Option<InitFn<O>>,
     ) -> anyhow::Result<Self> {
         let init = match init {
             Some(init) => init,

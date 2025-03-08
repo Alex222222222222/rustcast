@@ -19,14 +19,14 @@ impl LocalFileTrackList {
         repeat: Option<bool>,
         shuffle: Option<bool>,
     ) -> anyhow::Result<Self> {
-        fn init_fn(
-            t: (String, Arc<dyn FileProvider>),
-        ) -> Pin<
+        type PlaylistChildOutPin = Pin<
             Box<
                 dyn futures::Future<Output = anyhow::Result<Box<dyn PlaylistChild>>>
                     + std::marker::Send,
             >,
-        > {
+        >;
+
+        fn init_fn(t: (String, Arc<dyn FileProvider>)) -> PlaylistChildOutPin {
             Box::pin(async move {
                 Ok(Box::new(LocalFileTrack::new(t.0, t.1, Some(false)).await?)
                     as Box<dyn PlaylistChild>)

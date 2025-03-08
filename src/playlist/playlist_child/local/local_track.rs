@@ -179,6 +179,16 @@ impl LocalFileTrackInner {
     }
 }
 
+impl LocalFileTrackInner {
+    async fn new_stream(&self) -> anyhow::Result<Box<dyn AsyncRead + Send + Sync + Unpin>> {
+        let stream = match self.file_provider.get_file(&self.path).await? {
+            Some(stream) => stream,
+            None => return Err(anyhow::anyhow!("file not found")),
+        };
+        Ok(Box::new(stream))
+    }
+}
+
 #[async_trait]
 impl PlaylistChild for LocalFileTrackInner {
     async fn current_title(&mut self) -> anyhow::Result<Option<Arc<String>>> {
@@ -210,39 +220,37 @@ impl PlaylistChild for LocalFileTrackInner {
     }
 
     async fn next_frame(&mut self) -> anyhow::Result<Option<bytes::Bytes>> {
-        loop {
-            if self.played && !self.repeat {
-                self.current_stream = None;
+        if self.played && !self.repeat {
+            self.current_stream = None;
+            return Ok(None);
+        }
+
+        if self.current_stream.is_none() {
+            let stream = self.new_stream().await?;
+            self.current_stream = Some(stream);
+        }
+
+        let mut stream = self.current_stream.take().unwrap();
+        let mut buf = vec![0; DEFAULT_FRAME_SIZE];
+        let mut read = stream.read(&mut buf).await?;
+        if read == 0 {
+            self.current_stream = None;
+            self.played = true;
+            if !self.repeat {
                 return Ok(None);
             }
 
-            if self.current_stream.is_none() {
-                let stream = tokio::fs::File::open(&self.path).await?;
-                self.current_stream = Some(Box::new(stream));
-            }
-
-            let mut stream = self.current_stream.take().unwrap();
-            let mut buf = vec![0; DEFAULT_FRAME_SIZE];
-            let mut read = stream.read(&mut buf).await?;
+            stream = self.new_stream().await?;
+            read = stream.read(&mut buf).await?;
             if read == 0 {
                 self.current_stream = None;
-                self.played = true;
-                if !self.repeat {
-                    return Ok(None);
-                }
-
-                stream = Box::new(tokio::fs::File::open(&self.path).await?);
-                read = stream.read(&mut buf).await?;
-                if read == 0 {
-                    self.current_stream = None;
-                    anyhow::bail!("failed to read from file: {}", self.path);
-                }
+                anyhow::bail!("failed to read from file: {}", self.path);
             }
-
-            let frame = bytes::Bytes::from(buf).slice(0..read);
-            self.current_stream = Some(stream);
-            return Ok(Some(frame));
         }
+
+        let frame = bytes::Bytes::from(buf).slice(0..read);
+        self.current_stream = Some(stream);
+        return Ok(Some(frame));
     }
 
     async fn is_finished(&mut self) -> anyhow::Result<bool> {

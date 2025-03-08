@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::SinkExt;
 use http::Request;
-use log::{debug, error};
+use log::debug;
 use std::{sync::Arc, vec};
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;

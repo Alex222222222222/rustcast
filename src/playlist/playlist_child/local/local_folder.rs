@@ -6,8 +6,8 @@ use bytes::Bytes;
 use derive_lazy_playlist_child::LazyPlaylistChild;
 
 use super::LocalFileTrackList;
-use crate::LocalFileProvider;
 
+#[allow(clippy::duplicated_attributes)]
 #[derive(LazyPlaylistChild)]
 #[custom_input_type(input_type(name = "tracks", input_type = "String"))]
 #[custom_input_type(additional_input(name = "repeat", input_type = "bool", default = "false"))]
@@ -15,7 +15,7 @@ use crate::LocalFileProvider;
 #[custom_input_type(additional_input(
     name = "file_provider",
     input_type = "Arc<dyn FileProvider>",
-    default = "Arc::new(LocalFileProvider::new())",
+    default = "Arc::new(crate::LocalFileProvider::new())",
     optional = true
 ))]
 struct LocalFolderInner {

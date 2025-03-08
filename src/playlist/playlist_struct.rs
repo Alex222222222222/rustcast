@@ -147,6 +147,7 @@ impl Playlist {
     /// prepare_frames prepares the frames for the playlist
     /// do nothing if the playlist is finished
     /// or the playlist already has the next frame
+    /// prepare one frame each time
     pub async fn prepare_frame(&self) -> anyhow::Result<()> {
         if self.is_finished().await? {
             debug!("playlist is finished: {:?}", self.name);
@@ -159,40 +160,38 @@ impl Playlist {
         }
         drop(newest_prepared_frames);
 
-        loop {
-            let mut child = self.child.lock().await;
-            let frame = match child.next_frame().await? {
-                Some(frame) => frame,
-                None => {
-                    // the child is finished
-                    return Ok(());
-                }
-            };
-            let byte_per_millisecond = match child.byte_per_millisecond().await? {
-                Some(byte_per_millisecond) => byte_per_millisecond,
-                None => {
-                    // the child is finished
-                    return Ok(());
-                }
-            };
-            let duration = frame.len() as f64 / byte_per_millisecond;
-            drop(child);
+        let mut child = self.child.lock().await;
+        let frame = match child.next_frame().await? {
+            Some(frame) => frame,
+            None => {
+                // the child is finished
+                return Ok(());
+            }
+        };
+        let byte_per_millisecond = match child.byte_per_millisecond().await? {
+            Some(byte_per_millisecond) => byte_per_millisecond,
+            None => {
+                // the child is finished
+                return Ok(());
+            }
+        };
+        let duration = frame.len() as f64 / byte_per_millisecond;
+        drop(child);
 
-            let prepared_frame = PreparedFrame {
-                id: CONTEXT.get_id().await,
-                frame,
-                duration,
-                next: Arc::new(Mutex::new(None)),
-            };
+        let prepared_frame = PreparedFrame {
+            id: CONTEXT.get_id().await,
+            frame,
+            duration,
+            next: Arc::new(Mutex::new(None)),
+        };
 
-            let mut newest_prepared_frames = self.newest_prepared_frames.lock().await;
-            newest_prepared_frames
-                .set_next(prepared_frame.clone())
-                .await;
-            *newest_prepared_frames = prepared_frame;
+        let mut newest_prepared_frames = self.newest_prepared_frames.lock().await;
+        newest_prepared_frames
+            .set_next(prepared_frame.clone())
+            .await;
+        *newest_prepared_frames = prepared_frame;
 
-            return Ok(());
-        }
+        Ok(())
     }
 }
 

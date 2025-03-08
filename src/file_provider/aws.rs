@@ -61,16 +61,17 @@ impl FileProvider for AwsS3FileProvider {
     }
 }
 
+type StringOutPending =
+    Pin<Box<dyn futures::Future<Output = Option<anyhow::Result<String>>> + std::marker::Send>>;
+
 struct ObjectStoreListStream2FileProviderStream {
     res: usize,
-    pending: Option<
-        Pin<Box<dyn futures::Future<Output = Option<anyhow::Result<String>>> + std::marker::Send>>,
-    >,
+    pending: Option<StringOutPending>,
 }
 
 impl ObjectStoreListStream2FileProviderStream {
     async fn new(s: Arc<dyn ObjectStore>, p: Option<String>) -> Self {
-        let p = p.map(|p| object_store::path::Path::from(p));
+        let p = p.map(object_store::path::Path::from);
         let (sender, res) = tokio::sync::mpsc::channel(1);
         tokio::spawn(async move {
             let mut s = s.list(p.as_ref());
@@ -101,7 +102,7 @@ impl ResMap {
     }
 }
 
-static RES_MAP: once_cell::sync::Lazy<ResMap> = once_cell::sync::Lazy::new(|| ResMap::new());
+static RES_MAP: once_cell::sync::Lazy<ResMap> = once_cell::sync::Lazy::new(ResMap::new);
 
 fn remove_id(id: usize) {
     tokio::spawn(async move {

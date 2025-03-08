@@ -9,6 +9,12 @@ use super::FileProvider;
 
 pub struct LocalFileProvider {}
 
+impl Default for LocalFileProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LocalFileProvider {
     pub fn new() -> Self {
         Self {}
@@ -67,11 +73,12 @@ impl FileProvider for LocalFileProvider {
 type Entries = Arc<
     Mutex<Option<Box<dyn Stream<Item = tokio::io::Result<tokio::fs::DirEntry>> + Unpin + Send>>>,
 >;
+type StringOutPending = Pin<Box<dyn futures::Future<Output = Option<anyhow::Result<String>>>>>;
 
 struct MyReadDirStream {
     entries: Entries,
 
-    pending: Option<Pin<Box<dyn futures::Future<Output = Option<anyhow::Result<String>>>>>>,
+    pending: Option<StringOutPending>,
 }
 
 async fn next(s: Entries) -> Option<anyhow::Result<String>> {
