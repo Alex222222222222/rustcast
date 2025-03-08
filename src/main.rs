@@ -5,8 +5,6 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
 mod context;
-#[cfg(feature = "db")]
-mod db;
 
 mod file_provider;
 mod playlist;
@@ -14,9 +12,6 @@ mod shoutcast;
 
 pub use context::CONTEXT;
 pub use file_provider::*;
-
-#[cfg(feature = "db")]
-pub use db::DB;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

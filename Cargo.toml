@@ -32,18 +32,12 @@ id3 = "1.16"
 fern = "0.7"
 chrono = "0.4"
 mp3-duration = "0.1"
-sqlx = { version = "0.8", features = [
-    "runtime-tokio",
-    "sqlite",
-    "migrate",
-], optional = true }
 rand = "0.9"
 object_store = { version = "0.11", features = ["gcp", "aws", "azure", "http"] }
 
 
 [features]
 default = []
-db = ["sqlx"]
 
 [profile.release]
 # opt-level = 3
