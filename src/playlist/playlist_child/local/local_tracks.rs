@@ -1,23 +1,26 @@
 extern crate derive_lazy_playlist_child;
 
-use std::pin::Pin;
+use std::{pin::Pin, sync::Arc};
 
-use crate::playlist::{LocalFileTrack, PlaylistChild, PlaylistChildList};
+use crate::{
+    FileProvider,
+    playlist::{LocalFileTrack, PlaylistChild, PlaylistChildList},
+};
 use async_trait::async_trait;
 use bytes::Bytes;
 
 pub struct LocalFileTrackList {
-    t: PlaylistChildList<String>,
+    t: PlaylistChildList<(String, Arc<dyn FileProvider>)>,
 }
 
 impl LocalFileTrackList {
     pub async fn new(
-        tracks: Vec<String>,
+        tracks: Vec<(String, Arc<dyn FileProvider>)>,
         repeat: Option<bool>,
         shuffle: Option<bool>,
     ) -> anyhow::Result<Self> {
         fn init_fn(
-            t: String,
+            t: (String, Arc<dyn FileProvider>),
         ) -> Pin<
             Box<
                 dyn futures::Future<Output = anyhow::Result<Box<dyn PlaylistChild>>>
@@ -25,10 +28,18 @@ impl LocalFileTrackList {
             >,
         > {
             Box::pin(async move {
-                Ok(Box::new(LocalFileTrack::new(t, Some(false)).await?) as Box<dyn PlaylistChild>)
+                Ok(Box::new(LocalFileTrack::new(t.0, t.1, Some(false)).await?)
+                    as Box<dyn PlaylistChild>)
             })
         }
-        let t = PlaylistChildList::new(tracks, repeat, shuffle, Some(init_fn)).await?;
+        let t: PlaylistChildList<(String, Arc<dyn FileProvider>)> =
+            PlaylistChildList::<(String, Arc<dyn FileProvider>)>::new(
+                tracks,
+                repeat,
+                shuffle,
+                Some(init_fn),
+            )
+            .await?;
         Ok(Self { t })
     }
 }

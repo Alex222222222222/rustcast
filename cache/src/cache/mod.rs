@@ -8,9 +8,9 @@ use tempfile::NamedTempFile;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
-use crate::FileDownloader;
 use crate::utils::hash_str;
 use crate::{Error, meta::Meta};
+use crate::{FileDownloader, FileMetadata};
 
 mod cache_builder;
 pub use cache_builder::*;
@@ -116,8 +116,13 @@ impl Cache {
         // No existing version or the existing versions are older than their freshness
         // lifetimes, so we'll query for the ETAG of the resource and then compare
         // that with any existing versions.
-        let etag = self.get_etag(resource).await?;
-        let path = self.resource_to_filepath(resource, &etag, subdir, None);
+        let file_meta = self.get_file_meta(resource).await?;
+        let path = self.resource_to_filepath(
+            &file_meta.location,
+            subdir,
+            None,
+            file_meta.e_tag.as_deref(),
+        );
 
         // TODO do we need to lock the file here?
         // Before going further we need to obtain a lock on the file to provide
@@ -132,7 +137,7 @@ impl Cache {
         }
 
         // No up-to-date version cached, so we have to try downloading it.
-        let meta = self.download_resource(resource, &path, &etag).await?;
+        let meta = self.download_resource(&path, &file_meta).await?;
 
         info!("New version of {} cached", resource);
 
@@ -144,7 +149,7 @@ impl Cache {
         let mut existing_meta: Vec<Meta> = vec![];
         let glob_string = format!(
             "{}.*.meta",
-            self.resource_to_filepath(resource, &None, subdir, None)
+            self.resource_to_filepath(resource, subdir, None, None)
                 .to_str()
                 .unwrap(),
         );
@@ -160,11 +165,10 @@ impl Cache {
 
     async fn download_resource(
         &self,
-        resource: &str,
         path: &Path,
-        etag: &Option<String>,
+        file_meta: &FileMetadata,
     ) -> Result<Meta, Error> {
-        let mut response = self.file_downloader.get_file(resource).await?;
+        let mut response = self.file_downloader.get_file(&file_meta.location).await?;
 
         // First we make a temporary file and download the contents of the resource into it.
         // Otherwise if we wrote directly to the cache file and the download got
@@ -173,7 +177,7 @@ impl Cache {
         let mut tempfile_write_handle =
             OpenOptions::new().write(true).open(tempfile.path()).await?;
 
-        info!("Starting download of {}", resource);
+        info!("Starting download of {}", file_meta.location);
 
         let mut bytes_downloaded = 0;
         while let Some(b) = response.next().await {
@@ -188,39 +192,36 @@ impl Cache {
 
         debug!("Writing meta file");
 
-        let meta = Meta::new(
-            String::from(resource),
-            path.into(),
-            etag.clone(),
-            self.freshness_lifetime,
-        );
+        let meta = Meta::new(path.into(), file_meta.clone(), self.freshness_lifetime);
         meta.to_file().await?;
 
-        debug!("Renaming temp file to cache location for {}", resource);
+        debug!(
+            "Renaming temp file to cache location for {}",
+            file_meta.location
+        );
 
         tokio::fs::rename(tempfile.path(), path).await?;
 
         Ok(meta)
     }
 
-    async fn get_etag(&self, resource: &str) -> Result<Option<String>, Error> {
+    pub async fn get_file_meta(&self, resource: &str) -> Result<FileMetadata, Error> {
         debug!("Fetching ETAG for {}", resource);
-        let response = self.file_downloader.get_meta(resource).await?;
-        Ok(response.e_tag)
+        self.file_downloader.get_meta(resource).await
     }
 
     fn resource_to_filepath(
         &self,
         resource: &str,
-        etag: &Option<String>,
         subdir: Option<&str>,
         suffix: Option<&str>,
+        e_tag: Option<&str>,
     ) -> PathBuf {
         let mut resource_hash = sha2::Sha256::new();
         resource_hash.update(self.file_downloader.hash());
         resource_hash.update(resource.as_bytes());
         let resource_hash = format!("{:x}", resource_hash.finalize());
-        let mut filename = if let Some(tag) = etag {
+        let mut filename = if let Some(tag) = e_tag {
             let etag_hash = hash_str(&tag[..]);
             format!("{}.{}", resource_hash, etag_hash)
         } else {

@@ -14,7 +14,7 @@ impl super::FileDownloader for LocalDownloader {
     async fn get_file(
         &self,
         _: &str,
-    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin>, Error> {
+    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin + Send>, Error> {
         // This function should never be called for the local downloader.
         Err(Error::NotImplemented)
     }
@@ -22,6 +22,7 @@ impl super::FileDownloader for LocalDownloader {
     /// Get metadata for a file from the file provider.
     async fn get_meta(&self, _: &str) -> Result<FileMetadata, Error> {
         // This function should never be called for the local downloader.
+        // TODO impl this
         Err(Error::NotImplemented)
     }
 

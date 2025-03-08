@@ -2,16 +2,15 @@
 // static A: std::alloc::System = std::alloc::System;
 
 use std::{collections::HashMap, sync::Arc};
-use playlist::LocalFileTrack;
 use tokio::sync::Mutex;
 
 mod context;
 #[cfg(feature = "db")]
 mod db;
 
+mod file_provider;
 mod playlist;
 mod shoutcast;
-mod file_provider;
 
 pub use context::CONTEXT;
 pub use file_provider::*;
@@ -47,6 +46,7 @@ async fn main() -> anyhow::Result<()> {
         "/Users/zifanhua/Documents/Music/ist1/".to_string(),
         Some(true),
         Some(true),
+        Arc::new(LocalFileProvider::new()),
     )
     .await?;
 

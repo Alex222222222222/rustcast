@@ -5,11 +5,13 @@ use futures::Stream;
 mod impl_object_store;
 mod local_downloader;
 
-pub use local_downloader::LocalDownloader;
 pub use impl_object_store::*;
+pub use local_downloader::LocalDownloader;
+use serde::{Deserialize, Serialize};
 
 use crate::Error;
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileMetadata {
     /// The full path to the object
     pub location: String,
@@ -31,7 +33,7 @@ pub trait FileDownloader: Send + Sync {
     async fn get_file(
         &self,
         path: &str,
-    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin>, Error>;
+    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin + Send>, Error>;
 
     /// Get metadata for a file from the file provider.
     /// Returns ResourceNotFound error if the file does not exist.

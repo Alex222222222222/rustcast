@@ -8,7 +8,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use tokio::io::{AsyncRead, AsyncReadExt};
 
-use crate::playlist::{DEFAULT_FRAME_SIZE, PlaylistChild};
+use crate::{
+    FileProvider,
+    playlist::{DEFAULT_FRAME_SIZE, PlaylistChild},
+};
 
 /// use Arc to share the same content between threads
 static FILE_EXT_CONTENT_TYPES: Lazy<HashMap<String, Arc<String>>> = Lazy::new(|| {
@@ -52,31 +55,33 @@ struct MetaData {
     byte_per_millisecond: f64,
 }
 
-fn get_meta_data_from_file(path: &str) -> anyhow::Result<MetaData> {
+async fn get_meta_data_from_file(
+    path: &str,
+    file_provider: Arc<dyn FileProvider>,
+) -> anyhow::Result<MetaData> {
+    let cache_path = match file_provider.get_local_cache_path(path).await? {
+        Some(cache_path) => cache_path,
+        None => return Err(anyhow::anyhow!("file not found")),
+    };
     let content_type = match get_content_type_from_path(path) {
         Some(content_type) => content_type,
         None => return Err(anyhow::anyhow!("unsupported file type")),
     };
-    debug!("got content type: {}", content_type);
 
     let mut title = None;
     let mut artist = None;
     let mut duration = Option::None;
 
-    debug!("reading id3 tag from file: {}", path);
-    let tag = id3::Tag::read_from_path(path);
+    let tag = id3::Tag::read_from_path(&cache_path);
     let tag = id3::partial_tag_ok(tag);
     if let Ok(tag) = tag {
         title = tag.title().map(|t| t.to_string());
         artist = tag.artist().map(|t| t.to_string());
         duration = tag.duration();
-        debug!("got title: {:?}, artist: {:?}", title, artist);
-    } else {
-        debug!("failed to read id3 tag from file: {}", path);
     }
 
     if duration.is_none() {
-        duration = match mp3_duration::from_path(path) {
+        duration = match mp3_duration::from_path(&cache_path) {
             Ok(duration) => Some((duration.as_nanos() / 1_000_000) as u32),
             Err(_) => None,
         };
@@ -87,8 +92,11 @@ fn get_meta_data_from_file(path: &str) -> anyhow::Result<MetaData> {
     };
 
     // get size of the file
-    let file = std::fs::File::open(path)?;
-    let size = file.metadata()?.len();
+    let meta = match file_provider.get_meta(path).await? {
+        Some(meta) => meta,
+        None => return Err(anyhow::anyhow!("file not found")),
+    };
+    let size = meta.size;
     debug!("got file size: {}", size);
 
     // calculate the bitrate
@@ -99,13 +107,14 @@ fn get_meta_data_from_file(path: &str) -> anyhow::Result<MetaData> {
         content_type,
         title,
         artist,
-        byte_per_millisecond: byte_per_millisecond,
+        byte_per_millisecond,
     })
 }
 
 #[derive(LazyPlaylistChild)]
 pub struct LocalFileTrackInner {
     path: String,
+    file_provider: Arc<dyn FileProvider>,
     title: Arc<String>,
     artist: Arc<String>,
     content_type: Arc<String>,
@@ -116,8 +125,12 @@ pub struct LocalFileTrackInner {
 }
 
 impl LocalFileTrackInner {
-    pub async fn new(path: String, repeat: bool) -> anyhow::Result<Self> {
-        let mut meta_data = get_meta_data_from_file(&path)?;
+    pub async fn new(
+        path: String,
+        file_provider: Arc<dyn FileProvider>,
+        repeat: bool,
+    ) -> anyhow::Result<Self> {
+        let mut meta_data = get_meta_data_from_file(&path, file_provider.clone()).await?;
 
         if meta_data.title.is_none() || meta_data.artist.is_none() {
             debug!("failed to get title and artist from id3 tag, trying to get from file name");
@@ -156,6 +169,7 @@ impl LocalFileTrackInner {
             path,
             title,
             artist,
+            file_provider,
             content_type: meta_data.content_type,
             repeat,
             played: false,

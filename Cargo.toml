@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+cache = { path = "cache" }
 derive_lazy_playlist_child = { path = "derive_lazy_playlist_child" }
 tokio = { version = "1", features = [
     "rt",
@@ -21,7 +22,7 @@ bytes = "1"
 http = "1"
 futures = { version = "0.3", features = ["thread-pool"] }
 tokio-util = { version = "0.7", features = ["codec", "rt", "io", "net"] }
-tokio-stream = "0.1"
+tokio-stream = { version = "0.1", features = ["fs"] }
 serde_json = "1"
 httparse = "1.10"
 httpdate = "1"
@@ -37,12 +38,7 @@ sqlx = { version = "0.8", features = [
     "migrate",
 ], optional = true }
 rand = "0.9"
-object_store = { version = "0.11.2", features = [
-    "gcp",
-    "aws",
-    "azure",
-    "http",
-] }
+object_store = { version = "0.11", features = ["gcp", "aws", "azure", "http"] }
 
 
 [features]

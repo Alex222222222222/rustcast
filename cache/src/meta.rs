@@ -1,20 +1,18 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::Error;
 use crate::utils::now;
+use crate::{Error, FileMetadata};
 
 /// Holds information about a cached resource.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Meta {
-    /// The original resource name.
-    pub(crate) resource: String,
+    /// the meta data of the resource
+    pub(crate) meta_data: FileMetadata,
     /// Path to the cached resource.
     pub(crate) resource_path: PathBuf,
     /// Path to the serialized meta.
     pub(crate) meta_path: PathBuf,
-    /// The ETAG of the resource from the time it was cached, if there was one.
-    pub(crate) etag: Option<String>,
     /// Time that the freshness of this cached resource will expire.
     pub(crate) expires: Option<f64>,
     /// Time this version of the resource was cached.
@@ -23,9 +21,8 @@ pub(crate) struct Meta {
 
 impl Meta {
     pub(crate) fn new(
-        resource: String,
         resource_path: PathBuf,
-        etag: Option<String>,
+        meta_data: FileMetadata,
         freshness_lifetime: Option<u64>,
     ) -> Meta {
         let mut expires: Option<f64> = None;
@@ -35,10 +32,9 @@ impl Meta {
         }
         let meta_path = Meta::meta_path(&resource_path);
         Meta {
-            resource,
+            meta_data,
             resource_path,
             meta_path,
-            etag,
             expires,
             creation_time,
         }

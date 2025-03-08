@@ -100,6 +100,10 @@ impl AwsS3Downloader {
             hash,
         })
     }
+
+    pub fn get_object_store(&self) -> Arc<AmazonS3> {
+        self.object_store.clone()
+    }
 }
 
 #[async_trait]
@@ -107,7 +111,8 @@ impl FileDownloader for AwsS3Downloader {
     async fn get_file(
         &self,
         path: &str,
-    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin>, Error> {
+    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin + Send>, Error>
+    {
         let path = object_store::path::Path::from(path);
         match self.object_store.get(&path).await {
             Ok(file) => Ok(Box::new(ObjectStoreFileStream2FileProviderStream(

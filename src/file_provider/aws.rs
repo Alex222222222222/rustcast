@@ -1,85 +1,71 @@
-use std::{collections::HashMap, path, pin::Pin, sync::Arc, task::Poll};
+use std::{collections::HashMap, path::PathBuf, pin::Pin, sync::Arc, task::Poll};
 
 use async_trait::async_trait;
+use cache::AwsS3Downloader;
 use futures::{FutureExt, Stream, StreamExt};
-use object_store::{ObjectMeta, ObjectStore};
+use object_store::{ObjectStore, aws::AmazonS3Builder};
 use tokio::sync::Mutex;
 
 use crate::CONTEXT;
 
 use super::FileProvider;
 
+pub struct AwsS3FileProvider {
+    cache: Arc<cache::Cache>,
+    object_store: Arc<dyn ObjectStore>,
+}
+
+impl AwsS3FileProvider {
+    pub async fn new(builder: AmazonS3Builder) -> anyhow::Result<Self> {
+        let aws_downloader = AwsS3Downloader::new(builder)?;
+        let object_store = aws_downloader.get_object_store();
+        let cache = cache::Cache::builder()
+            .file_downloader(Box::new(aws_downloader))
+            .build()
+            .await?;
+        Ok(Self {
+            cache: cache.into(),
+            object_store,
+        })
+    }
+}
+
 #[async_trait]
-impl FileProvider for Arc<dyn ObjectStore> {
-    async fn get_file(
-        &self,
-        path: &str,
-    ) -> anyhow::Result<Option<Box<dyn Stream<Item = anyhow::Result<bytes::Bytes>>>>> {
-        // TODO impl cache
-        let path = object_store::path::Path::from(path);
-        match self.get(&path).await {
-            Ok(file) => Ok(Some(Box::new(ObjectStoreFileStream2FileProviderStream(
-                file.into_stream(),
-            )))),
-            Err(object_store::Error::NotFound { .. }) => Ok(None),
-            Err(e) => return Err(e.into()),
+impl FileProvider for AwsS3FileProvider {
+    /// Get a file local cache path from the file provider.
+    /// return the local cache path if the file exists, otherwise None.
+    async fn get_local_cache_path(&self, path: &str) -> anyhow::Result<Option<PathBuf>> {
+        match self.cache.cached_path(path).await {
+            Ok(p) => Ok(Some(p)),
+            Err(cache::Error::ResourceNotFound(_)) => Ok(None),
+            Err(e) => Err(e.into()),
         }
     }
 
-    async fn get_size(&self, path: &str) -> anyhow::Result<Option<usize>>
-    {
-        let path = object_store::path::Path::from(path);
-        match self.head(&path).await {
-            Ok(meta) => Ok(Some(meta.size)),
-            Err(object_store::Error::NotFound { .. }) => Ok(None),
+    async fn get_meta(&self, path: &str) -> anyhow::Result<Option<cache::FileMetadata>> {
+        let meta = match self.cache.get_file_meta(path).await {
+            Ok(m) => m,
+            Err(cache::Error::ResourceNotFound(_)) => return Ok(None),
             Err(e) => return Err(e.into()),
-        }
+        };
+        Ok(Some(meta))
     }
 
     async fn list_files(
         &self,
         path: Option<String>,
-    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>>>>
-    {
-        let r = ObjectStoreListStream2FileProviderStream::new(self.clone(), path).await;
-        let r: Box<dyn Stream<Item = anyhow::Result<String>>> = Box::new(r);
-        Ok(r)
+    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>>>> {
+        let s =
+            ObjectStoreListStream2FileProviderStream::new(self.object_store.clone(), path).await;
+        Ok(Box::new(s))
     }
 }
-
-struct ObjectStoreFileStream2FileProviderStream(
-    Pin<
-        Box<
-            (
-                dyn futures::Stream<Item = Result<bytes::Bytes, object_store::Error>>
-                    + std::marker::Send
-                    + 'static
-            ),
-        >,
-    >,
-);
 
 struct ObjectStoreListStream2FileProviderStream {
     res: usize,
     pending: Option<
         Pin<Box<dyn futures::Future<Output = Option<anyhow::Result<String>>> + std::marker::Send>>,
     >,
-}
-
-impl Stream for ObjectStoreFileStream2FileProviderStream {
-    type Item = anyhow::Result<bytes::Bytes>;
-
-    fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        match self.0.poll_next_unpin(cx) {
-            std::task::Poll::Ready(Some(Ok(bytes))) => std::task::Poll::Ready(Some(Ok(bytes))),
-            std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Some(Err(e.into()))),
-            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
-    }
 }
 
 impl ObjectStoreListStream2FileProviderStream {
