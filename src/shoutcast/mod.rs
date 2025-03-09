@@ -12,6 +12,12 @@ mod request_handler;
 
 use request_handler::RequestHandler;
 
+#[derive(Debug)]
+pub struct ListenerID {
+    pub session_id: Option<String>,
+    pub listener_id: usize,
+}
+
 pub async fn listen(
     host: &str,
     port: u16,
@@ -50,7 +56,7 @@ async fn process(
     let path = path.trim_matches('/');
     let playlist = playlists.get(path);
     if let Some(playlist) = playlist {
-        let mut handler = RequestHandler::new(transport.clone(), playlist.clone(), request);
+        let mut handler = RequestHandler::new(transport.clone(), playlist.clone(), request).await?;
         handler.handle_request().await?;
     } else {
         debug!("playlist not found for path: {path}");

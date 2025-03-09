@@ -4,7 +4,7 @@ use bytes::Bytes;
 use log::debug;
 use tokio::sync::Mutex;
 
-use crate::CONTEXT;
+use crate::{CONTEXT, shoutcast::ListenerID};
 
 use super::{PlaylistChild, listener_frame_data::ListenerFrameData};
 
@@ -35,8 +35,7 @@ pub struct Playlist {
     pub name: Arc<String>,
     child: Arc<Mutex<dyn PlaylistChild>>,
     newest_prepared_frames: Mutex<PreparedFrame>,
-    oldest_prepared_frames: Mutex<PreparedFrame>,
-    listener_frame_data_db: Mutex<ListenerFrameData>,
+    listener_frame_data_db: ListenerFrameData,
 }
 
 impl Playlist {
@@ -46,88 +45,22 @@ impl Playlist {
             duration: 0.0,
             id: CONTEXT.get_id().await,
             next: Arc::new(Mutex::new(None)),
+            title: Arc::new("".to_string()),
+            artist: Arc::new("".to_string()),
         };
         Self {
             name: name.into(),
             child,
             newest_prepared_frames: Mutex::new(frame.clone()),
-            oldest_prepared_frames: Mutex::new(frame),
-            listener_frame_data_db: ListenerFrameData::new().into(),
+            listener_frame_data_db: ListenerFrameData::new(Arc::new(Mutex::new(frame.clone()))),
         }
-    }
-
-    /// delete a listener from the playlist
-    pub async fn delete_listener_data(&self, listener_id: usize) {
-        let mut listener_frame_data_db = self.listener_frame_data_db.lock().await;
-        listener_frame_data_db.delete_listener_data(listener_id);
-        drop(listener_frame_data_db);
-
-        self.update_oldest_frame_by_db_smallest_frame_id().await
     }
 
     /// log the listener current frame
-    pub async fn log_current_frame(&self, listener_id: usize, frame_id: usize) {
-        let mut listener_frame_data_db = self.listener_frame_data_db.lock().await;
-        listener_frame_data_db.log_current_frame(listener_id, frame_id);
-        drop(listener_frame_data_db);
-
-        self.update_oldest_frame_by_db_smallest_frame_id().await
-    }
-
-    /// get the smallest frame id in ListenerFrame
-    async fn get_smallest_frame_id(&self) -> Option<usize> {
-        let listener_frame_data_db = self.listener_frame_data_db.lock().await;
-        listener_frame_data_db.get_smallest_frame_id().await
-    }
-
-    async fn update_oldest_frame_by_db_smallest_frame_id(&self) {
-        while self.get_smallest_frame_id().await.is_none() {
-            if !self.advance_oldest_frame().await {
-                break;
-            }
-        }
-        let db_smallest_frame_id = match self.get_smallest_frame_id().await {
-            Some(id) => id,
-            None => return,
-        };
-
-        let mut self_oldest_frame_id = self.get_self_oldest_frame_id().await;
-
-        while db_smallest_frame_id > self_oldest_frame_id {
-            if !self.advance_oldest_frame().await {
-                break;
-            }
-            self_oldest_frame_id = self.get_self_oldest_frame_id().await;
-        }
-    }
-
-    async fn advance_oldest_frame(&self) -> bool {
-        let mut oldest_prepared_frames = self.oldest_prepared_frames.lock().await;
-        if !(oldest_prepared_frames.frame.is_unique() || oldest_prepared_frames.frame.is_empty()) {
-            return false;
-        }
-        oldest_prepared_frames.frame.clear();
-        let next = oldest_prepared_frames.get_next().await;
-        if let Some(next) = next {
-            *oldest_prepared_frames = next;
-            return true;
-        }
-
-        false
-    }
-
-    async fn get_self_oldest_frame_id(&self) -> usize {
-        self.oldest_prepared_frames.lock().await.id
-    }
-
-    /// current_title returns the title of current playing song
-    pub async fn current_title(&self) -> anyhow::Result<Option<Arc<String>>> {
-        self.child.lock().await.current_title().await
-    }
-
-    ///    Artist returns the artist which is currently playing.
-    pub async fn current_artist(&self) -> anyhow::Result<Option<Arc<String>>> {
-        self.child.lock().await.current_artist().await
+    pub async fn log_current_frame(&self, listener_id: &ListenerID, frame: PreparedFrame) {
+        self.listener_frame_data_db
+            .log_current_frame(listener_id, frame)
+            .await;
     }
 
     /// return the current content type of the playlist
@@ -141,7 +74,7 @@ impl Playlist {
     }
 
     pub async fn get_oldest_prepared_frames(&self) -> PreparedFrame {
-        self.oldest_prepared_frames.lock().await.clone()
+        self.listener_frame_data_db.get_current_frame().await
     }
 
     /// prepare_frames prepares the frames for the playlist
@@ -161,7 +94,7 @@ impl Playlist {
         drop(newest_prepared_frames);
 
         let mut child = self.child.lock().await;
-        let frame = match child.next_frame().await? {
+        let (frame, title, artist) = match child.next_frame_with_meta().await? {
             Some(frame) => frame,
             None => {
                 // the child is finished
@@ -183,6 +116,8 @@ impl Playlist {
             frame,
             duration,
             next: Arc::new(Mutex::new(None)),
+            title,
+            artist,
         };
 
         let mut newest_prepared_frames = self.newest_prepared_frames.lock().await;
@@ -192,6 +127,10 @@ impl Playlist {
         *newest_prepared_frames = prepared_frame;
 
         Ok(())
+    }
+
+    pub async fn get_frame_with_id(&self, id: &ListenerID) -> Option<PreparedFrame> {
+        self.listener_frame_data_db.get_frame_with_id(id).await
     }
 }
 
@@ -204,6 +143,8 @@ pub struct PreparedFrame {
     /// id of the frame that is used to track the order of the frames
     /// should be monotonically increasing
     pub id: usize,
+    pub title: Arc<String>,
+    pub artist: Arc<String>,
     next: Arc<Mutex<Option<PreparedFrame>>>,
 }
 

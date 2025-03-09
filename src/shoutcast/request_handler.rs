@@ -7,7 +7,12 @@ use std::{sync::Arc, vec};
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
 
-use crate::playlist::{Playlist, PlaylistFrameStream};
+use crate::{
+    CONTEXT,
+    playlist::{Playlist, PlaylistFrameStream},
+};
+
+use super::ListenerID;
 
 /// MetaDataInterval is the data interval in which meta data is send
 const META_DATA_INTERVAL: usize = 65536;
@@ -91,20 +96,33 @@ pub struct RequestHandler {
     sink: MySink,
     playlist: Arc<Playlist>,
     meta_data_support: bool,
+    id: ListenerID,
+    title: Arc<String>,
+    artist: Arc<String>,
 }
 impl RequestHandler {
     // new creates a new RequestHandler
-    pub fn new(
+    pub async fn new(
         sink: Arc<Mutex<tokio_util::codec::Framed<tokio::net::TcpStream, super::Http>>>,
         playlist: Arc<Playlist>,
         request: Request<()>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let meta_data_support = meta_data_support(&request);
-        Self {
+        let session_id = match request.headers().get("x-playback-session-id") {
+            Some(v) => Some(v.to_str()?.to_string()),
+            None => None,
+        };
+        Ok(Self {
             sink: MySink(sink),
             playlist,
             meta_data_support,
-        }
+            id: ListenerID {
+                session_id,
+                listener_id: CONTEXT.get_id().await,
+            },
+            title: Arc::new("".to_string()),
+            artist: Arc::new("".to_string()),
+        })
     }
 
     /// HandleRequest handles requests from streaming clients. It tries to extract
@@ -116,7 +134,7 @@ impl RequestHandler {
 
         self.write_stream_start_response().await?;
 
-        let mut frame_stream = PlaylistFrameStream::new(self.playlist.clone()).await;
+        let mut frame_stream = PlaylistFrameStream::new(self.playlist.clone(), &self.id).await;
         let mut bytes_before_next_meta_data = META_DATA_INTERVAL;
 
         loop {
@@ -126,9 +144,11 @@ impl RequestHandler {
                     return Ok(());
                 }
             };
+            self.title = frame.title.clone();
+            self.artist = frame.artist.clone();
 
             self.playlist
-                .log_current_frame(frame_stream.listener_id, frame.id)
+                .log_current_frame(&self.id, frame.clone())
                 .await;
 
             bytes_before_next_meta_data = self
@@ -197,23 +217,8 @@ impl RequestHandler {
 
     /// writeStreamMetaData writes meta data information into the stream.
     async fn write_stream_meta_data(&mut self) -> anyhow::Result<()> {
-        let current_title = match self.playlist.current_title().await? {
-            Some(title) => title,
-            None => {
-                debug!("current title is none");
-                Arc::new("Unknown Track".to_string())
-            }
-        };
-        let current_artist = match self.playlist.current_artist().await? {
-            Some(artist) => artist,
-            None => {
-                debug!("current artist is none");
-                Arc::new("Unknown Artist".to_string())
-            }
-        };
-
         // TODO optimize this
-        let stream_title = format!("{} - {}", current_artist, current_title);
+        let stream_title = format!("{} - {}", self.artist, self.title);
         let stream_title = if stream_title.len() > MAX_META_DATA_SIZE - 15 {
             // Truncate stream title if necessary
             format!(

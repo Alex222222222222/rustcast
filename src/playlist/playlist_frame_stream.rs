@@ -1,11 +1,10 @@
 use std::{pin::Pin, sync::Arc, task::Poll};
 
 use futures::Stream;
-use log::debug;
 
 use crate::{
-    CONTEXT,
     playlist::{MAX_WRITE_AHEAD_DURATION, PreparedFrame},
+    shoutcast::ListenerID,
 };
 
 use super::Playlist;
@@ -15,7 +14,6 @@ type PlaylistFrameStreamPendingFuture =
 
 pub struct PlaylistFrameStream {
     playlist: Arc<Playlist>,
-    pub listener_id: usize,
     current_stream_frame: PreparedFrame,
     /// duration that has been written to the client in milliseconds
     write_ahead_duration: f64,
@@ -25,21 +23,14 @@ pub struct PlaylistFrameStream {
     waiting_pending_future: Option<Pin<Box<dyn futures::Future<Output = ()> + Send>>>,
 }
 
-impl Drop for PlaylistFrameStream {
-    fn drop(&mut self) {
-        // delete listener data when the stream is dropped
-        let listener_id = self.listener_id;
-        let playlist = self.playlist.clone();
-        tokio::spawn(async move { playlist.delete_listener_data(listener_id).await });
-    }
-}
-
 impl PlaylistFrameStream {
-    pub async fn new(playlist: Arc<Playlist>) -> Self {
-        let current_stream_frame = playlist.get_oldest_prepared_frames().await;
+    pub async fn new(playlist: Arc<Playlist>, listener_id: &ListenerID) -> Self {
+        let current_stream_frame = match playlist.get_frame_with_id(listener_id).await {
+            Some(frame) => frame,
+            None => playlist.get_oldest_prepared_frames().await,
+        };
         Self {
             playlist,
-            listener_id: CONTEXT.get_id().await,
             current_stream_frame,
             write_ahead_duration: 0.0,
             created_time: std::time::SystemTime::now()
@@ -94,6 +85,9 @@ impl Stream for PlaylistFrameStream {
                         Ok(Some(frame)) => {
                             self.current_stream_frame = frame.clone();
                             self.write_ahead_duration += frame.duration;
+                            self.waiting_pending_future = Some(Box::pin(tokio::time::sleep(
+                                std::time::Duration::from_millis(frame.duration.floor() as u64),
+                            )));
                             return Poll::Ready(Some(Ok(frame)));
                         }
                         Ok(None) => {

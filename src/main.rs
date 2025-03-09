@@ -1,6 +1,6 @@
-// # [global_allocator]
-// static A: std::alloc::System = std::alloc::System;
+// TODO cache x-playback-session-id
 
+use object_store::aws::AmazonS3Builder;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -34,11 +34,26 @@ async fn main() -> anyhow::Result<()> {
         .apply()
         .unwrap();
 
+    let s3_builder = AmazonS3Builder::new()
+        .with_endpoint("https://4e2f1d3d2666e9a944e48be955fce140.r2.cloudflarestorage.com")
+        .with_secret_access_key("287d17df6262bde9b8eb9c7c3f930b546bbc8d2d1ede9db62188cc622f65180e")
+        .with_access_key_id("f8f461c5d4a9f9cf3bb488732c50b72a")
+        .with_bucket_name("personal-radio-station-music");
+
+    /*
+        let local_track = playlist::LocalFolder::new(
+            "/Users/zifanhua/Documents/Music/ist1/".to_string(),
+            Some(true),
+            Some(true),
+            Arc::new(LocalFileProvider::new()),
+        )
+        .await?;
+    */
     let local_track = playlist::LocalFolder::new(
-        "/Users/zifanhua/Documents/Music/ist1/".to_string(),
+        "/".to_string(),
         Some(true),
         Some(true),
-        Arc::new(LocalFileProvider::new()),
+        Arc::new(AwsS3FileProvider::new(s3_builder).await?),
     )
     .await?;
 

@@ -36,6 +36,24 @@ pub trait PlaylistChild: Sync + Send {
     /// return none if the playlist is finished
     async fn next_frame(&mut self) -> anyhow::Result<Option<Bytes>>;
 
+    async fn next_frame_with_meta(
+        &mut self,
+    ) -> anyhow::Result<Option<(Bytes, Arc<String>, Arc<String>)>> {
+        let frame = match self.next_frame().await? {
+            Some(frame) => frame,
+            None => return Ok(None),
+        };
+        let title = match self.current_title().await? {
+            Some(title) => title,
+            None => return Ok(None),
+        };
+        let artist = match self.current_artist().await? {
+            Some(artist) => artist,
+            None => return Ok(None),
+        };
+        Ok(Some((frame, title, artist)))
+    }
+
     /// check if the Playlist is finished
     async fn is_finished(&mut self) -> anyhow::Result<bool>;
 
