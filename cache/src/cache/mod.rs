@@ -123,6 +123,7 @@ impl Cache {
             None,
             file_meta.e_tag.as_deref(),
         );
+        debug!("Resource path: {:?}", path);
 
         // TODO do we need to lock the file here?
         // Before going further we need to obtain a lock on the file to provide

@@ -120,7 +120,6 @@ impl Stream for PlaylistFrameStream {
         if self.write_ahead_duration.ceil() as u128 + self.created_time
             > MAX_WRITE_AHEAD_DURATION + current_time
         {
-            debug!("write ahead duration is too high, wait for 5 seconds");
             // pin the wait future
             self.waiting_pending_future = Some(Box::pin(tokio::time::sleep(
                 std::time::Duration::from_secs(5),

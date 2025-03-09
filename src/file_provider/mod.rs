@@ -40,5 +40,5 @@ pub trait FileProvider: Send + Sync {
     async fn list_files(
         &self,
         path: Option<String>,
-    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>>>>;
+    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>> + Unpin + Send>>;
 }

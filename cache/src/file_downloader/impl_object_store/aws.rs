@@ -3,6 +3,7 @@ use std::{pin::Pin, sync::Arc};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
+use log::debug;
 use object_store::{
     ObjectStore,
     aws::{AmazonS3, AmazonS3Builder, AmazonS3ConfigKey},
@@ -113,7 +114,7 @@ impl FileDownloader for AwsS3Downloader {
         path: &str,
     ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin + Send>, Error>
     {
-        let path = object_store::path::Path::from(path);
+        let path = object_store::path::Path::parse(path)?;
         match self.object_store.get(&path).await {
             Ok(file) => Ok(Box::new(ObjectStoreFileStream2FileProviderStream(
                 file.into_stream(),
@@ -126,7 +127,8 @@ impl FileDownloader for AwsS3Downloader {
     }
 
     async fn get_meta(&self, path: &str) -> Result<FileMetadata, Error> {
-        let path = object_store::path::Path::from(path);
+        debug!("get meta of {}", path);
+        let path = object_store::path::Path::parse(path)?;
         match self.object_store.head(&path).await {
             Ok(meta) => Ok(FileMetadata {
                 size: meta.size,
@@ -135,6 +137,7 @@ impl FileDownloader for AwsS3Downloader {
                 e_tag: meta.e_tag,
             }),
             Err(object_store::Error::NotFound { .. }) => {
+                debug!("file not found: {}", path);
                 Err(Error::ResourceNotFound(path.to_string()))
             }
             Err(e) => return Err(e.into()),

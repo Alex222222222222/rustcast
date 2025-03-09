@@ -36,6 +36,10 @@ pub enum Error {
     #[error("Failed to get object storage")]
     ObjectStorageError(#[from] object_store::Error),
 
+    /// Failed to parse a object storage path.
+    #[error("Failed to parse object storage path")]
+    ObjectStoragePathError(#[from] object_store::path::Error),
+
     /// An HTTP error that could occur while attempting to fetch a remote resource.
     #[error(transparent)]
     HttpError(#[from] reqwest::Error),

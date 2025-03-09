@@ -3,6 +3,7 @@ use std::{collections::HashMap, path::PathBuf, pin::Pin, sync::Arc, task::Poll};
 use async_trait::async_trait;
 use cache::AwsS3Downloader;
 use futures::{FutureExt, Stream, StreamExt};
+use log::debug;
 use object_store::{ObjectStore, aws::AmazonS3Builder};
 use tokio::sync::Mutex;
 
@@ -54,9 +55,10 @@ impl FileProvider for AwsS3FileProvider {
     async fn list_files(
         &self,
         path: Option<String>,
-    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>>>> {
+    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>> + Unpin + Send>> {
+        debug!("list files in {:?}", path);
         let s =
-            ObjectStoreListStream2FileProviderStream::new(self.object_store.clone(), path).await;
+            ObjectStoreListStream2FileProviderStream::new(self.object_store.clone(), path).await?;
         Ok(Box::new(s))
     }
 }
@@ -70,8 +72,11 @@ struct ObjectStoreListStream2FileProviderStream {
 }
 
 impl ObjectStoreListStream2FileProviderStream {
-    async fn new(s: Arc<dyn ObjectStore>, p: Option<String>) -> Self {
-        let p = p.map(object_store::path::Path::from);
+    async fn new(s: Arc<dyn ObjectStore>, p: Option<String>) -> anyhow::Result<Self> {
+        let p = match p {
+            Some(p) => Some(object_store::path::Path::parse(&p)?),
+            None => None,
+        };
         let (sender, res) = tokio::sync::mpsc::channel(1);
         tokio::spawn(async move {
             let mut s = s.list(p.as_ref());
@@ -87,10 +92,10 @@ impl ObjectStoreListStream2FileProviderStream {
         });
         let id = CONTEXT.get_id().await;
         insert_res(id, res).await;
-        Self {
+        Ok(Self {
             res: id,
             pending: None,
-        }
+        })
     }
 }
 

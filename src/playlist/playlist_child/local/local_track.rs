@@ -35,9 +35,7 @@ static FILE_EXT_CONTENT_TYPES: Lazy<HashMap<String, Arc<String>>> = Lazy::new(||
 });
 
 fn get_content_type_from_path(path: &str) -> Option<Arc<String>> {
-    debug!("get content type from path: {}", path);
     let ext = get_ext(path)?;
-    debug!("got file extension: {}", ext);
     FILE_EXT_CONTENT_TYPES.get(ext.as_str()).cloned()
 }
 
@@ -97,11 +95,9 @@ async fn get_meta_data_from_file(
         None => return Err(anyhow::anyhow!("file not found")),
     };
     let size = meta.size;
-    debug!("got file size: {}", size);
 
     // calculate the bitrate
     let byte_per_millisecond = (size + 1) as f64 / duration as f64;
-    debug!("byte per millisecond: {}", byte_per_millisecond);
 
     Ok(MetaData {
         content_type,

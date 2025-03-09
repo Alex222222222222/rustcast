@@ -4,6 +4,8 @@ use crate::{FileProvider, playlist::PlaylistChild};
 use async_trait::async_trait;
 use bytes::Bytes;
 use derive_lazy_playlist_child::LazyPlaylistChild;
+use log::error;
+use tokio_stream::StreamExt;
 
 use super::LocalFileTrackList;
 
@@ -32,11 +34,15 @@ impl LocalFolderInner {
     ) -> anyhow::Result<Self> {
         // read the folder and get all the tracks
         let mut new_tracks = Vec::new();
-        let mut dir = tokio::fs::read_dir(tracks).await?;
-        while let Some(entry) = dir.next_entry().await? {
-            let path = entry.path();
-            if path.is_file() {
-                new_tracks.push((path.to_string_lossy().to_string(), file_provider.clone()));
+        let mut dir = file_provider.list_files(Some(tracks)).await?;
+        while let Some(entry) = dir.next().await {
+            match entry {
+                Ok(path) => {
+                    new_tracks.push((path, file_provider.clone()));
+                }
+                Err(e) => {
+                    error!("error reading directory: {:?}", e);
+                }
             }
         }
 

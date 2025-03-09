@@ -54,7 +54,7 @@ impl FileProvider for LocalFileProvider {
     async fn list_files(
         &self,
         path: Option<String>,
-    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>>>> {
+    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>> + Unpin + Send>> {
         let p = match path {
             Some(p) => PathBuf::from(p),
             None => PathBuf::from("."),
@@ -73,7 +73,8 @@ impl FileProvider for LocalFileProvider {
 type Entries = Arc<
     Mutex<Option<Box<dyn Stream<Item = tokio::io::Result<tokio::fs::DirEntry>> + Unpin + Send>>>,
 >;
-type StringOutPending = Pin<Box<dyn futures::Future<Output = Option<anyhow::Result<String>>>>>;
+type StringOutPending =
+    Pin<Box<dyn futures::Future<Output = Option<anyhow::Result<String>>> + Send>>;
 
 struct MyReadDirStream {
     entries: Entries,

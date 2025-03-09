@@ -62,7 +62,6 @@ where
         let mut tracks = tracks;
         let mut new_tracks: Vec<Box<dyn PlaylistChild>> = Vec::with_capacity(tracks.len());
         while let Some(track) = tracks.pop() {
-            debug!("creating playlist child");
             let track = match (init)(track).await {
                 Ok(track) => track,
                 Err(e) => {
