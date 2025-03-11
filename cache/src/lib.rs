@@ -1,8 +1,8 @@
 mod cache;
 mod error;
+mod file_downloader;
 mod meta;
 mod utils;
-mod file_downloader;
 
 pub use cache::*;
 pub use error::Error;

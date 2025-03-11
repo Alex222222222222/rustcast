@@ -14,7 +14,8 @@ impl super::FileDownloader for LocalDownloader {
     async fn get_file(
         &self,
         _: &str,
-    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin + Send>, Error> {
+    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin + Send>, Error>
+    {
         // This function should never be called for the local downloader.
         Err(Error::NotImplemented)
     }

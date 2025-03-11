@@ -12,4 +12,4 @@ pub use playlist_struct::{Playlist, PreparedFrame};
 const DEFAULT_FRAME_SIZE: usize = 2097152;
 
 /// maximum write ahead duration in milliseconds for the playlist
-const MAX_WRITE_AHEAD_DURATION: u128 = 60000;
+const MAX_WRITE_AHEAD_DURATION: u128 = 120000;
