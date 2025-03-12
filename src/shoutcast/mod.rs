@@ -18,17 +18,25 @@ pub struct ListenerID {
     pub listener_id: usize,
 }
 
-pub async fn listen(
-    host: &str,
-    port: u16,
-    playlists: Arc<HashMap<String, Arc<Playlist>>>,
-) -> anyhow::Result<()> {
+pub async fn listen(host: String, port: u16, playlists: Arc<HashMap<String, Arc<Playlist>>>) {
     let addr = format!("{host}:{port}");
-    let server = TcpListener::bind(&addr).await?;
+    let server = match TcpListener::bind(&addr).await {
+        Ok(server) => server,
+        Err(e) => {
+            error!("failed to bind to: {addr}, error: {e}");
+            return;
+        }
+    };
     info!("Listening on: {addr}");
 
     loop {
-        let (stream, _) = server.accept().await?;
+        let (stream, _) = match server.accept().await {
+            Ok(s) => s,
+            Err(e) => {
+                error!("failed to accept connection: {e}");
+                continue;
+            }
+        };
         let playlists = playlists.clone();
         tokio::spawn(async move {
             if let Err(e) = process(stream, playlists).await {

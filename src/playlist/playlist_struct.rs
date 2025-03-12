@@ -33,13 +33,13 @@ use super::{PlaylistChild, listener_frame_data::ListenerFrameData};
 ///     `oldest_prepared_frames` to match the smallest frame id in the db.
 pub struct Playlist {
     pub name: Arc<String>,
-    child: Arc<Mutex<dyn PlaylistChild>>,
+    child: Arc<Mutex<Box<dyn PlaylistChild>>>,
     newest_prepared_frames: Mutex<PreparedFrame>,
     listener_frame_data_db: ListenerFrameData,
 }
 
 impl Playlist {
-    pub async fn new(name: String, child: Arc<Mutex<dyn PlaylistChild>>) -> Self {
+    pub async fn new(name: String, child: Arc<Mutex<Box<dyn PlaylistChild>>>) -> Self {
         let frame = PreparedFrame {
             frame: Bytes::new(),
             duration: 0.0,

@@ -36,6 +36,10 @@ mp3-duration = "0.1"
 rand = "0.9"
 object_store = { version = "0.11", features = ["gcp", "aws", "azure", "http"] }
 moka = { version = "0.12", features = ["future"] }
+clap = { version = "4.5", features = ["derive"] }
+
+[dev-dependencies]
+static_assertions = "1.1"
 
 [profile.release]
 debug = false

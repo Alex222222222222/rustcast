@@ -8,24 +8,32 @@ use log::{debug, error};
 
 use super::PlaylistChild;
 
-type InitFn<O> =
-    fn(O) -> Pin<Box<dyn Future<Output = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>;
+type InitFn<O, F> =
+    fn(O, F) -> Pin<Box<dyn Future<Output = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>;
 
 /// PlaylistChildList is a struct that contains a list of
 /// playlist children, the current index, whether to repeat
 /// the playlist, whether to shuffle the playlist, and whether
 /// the playlist is played.
+#[allow(clippy::duplicated_attributes)]
 #[derive(LazyPlaylistChild)]
 #[custom_input_type(input_type(name = "tracks", input_type = "Vec<O>"))]
 #[custom_input_type(additional_input(
-    name = "init",
-    input_type = "Option<InitFn<O>>",
+    name = "f",
+    input_type = "Option<F>",
     default = "None",
     optional = true
 ))]
-struct PlaylistChildListInner<O>
+#[custom_input_type(additional_input(
+    name = "init",
+    input_type = "Option<InitFn<O,F>>",
+    default = "None",
+    optional = true
+))]
+struct PlaylistChildListInner<O, F>
 where
     O: Send + Sync,
+    F: Send + Sync + Clone,
 {
     /// list of local file tracks
     tracks: Vec<Box<dyn PlaylistChild>>,
@@ -38,18 +46,20 @@ where
     /// whether the playlist is played
     played: bool,
     /// PhantomData to hold the type of the playlist child
-    p: PhantomData<O>,
+    p: PhantomData<(O, F)>,
 }
 
-impl<O> PlaylistChildListInner<O>
+impl<O, F> PlaylistChildListInner<O, F>
 where
     O: Send + Sync,
+    F: Send + Sync + Clone,
 {
     async fn new(
         tracks: Vec<O>,
         repeat: bool,
         shuffle: bool,
-        init: Option<InitFn<O>>,
+        f: Option<F>,
+        init: Option<InitFn<O, F>>,
     ) -> anyhow::Result<Self> {
         let init = match init {
             Some(init) => init,
@@ -59,10 +69,16 @@ where
                 ));
             }
         };
+        let f = match f {
+            Some(f) => f,
+            None => {
+                return Err(anyhow::anyhow!("f is required for PlaylistChildListInner"));
+            }
+        };
         let mut tracks = tracks;
         let mut new_tracks: Vec<Box<dyn PlaylistChild>> = Vec::with_capacity(tracks.len());
         while let Some(track) = tracks.pop() {
-            let track = match (init)(track).await {
+            let track = match (init)(track, f.clone()).await {
                 Ok(track) => track,
                 Err(e) => {
                     log::error!("failed to create playlist child: {}", e);
@@ -85,12 +101,7 @@ where
             p: PhantomData,
         })
     }
-}
 
-impl<O> PlaylistChildListInner<O>
-where
-    O: Send + Sync,
-{
     async fn remove_track(&mut self, index: usize) -> anyhow::Result<()> {
         if index >= self.tracks.len() {
             return Err(anyhow::anyhow!("index out of range"));
@@ -119,9 +130,10 @@ where
 }
 
 #[async_trait]
-impl<O> PlaylistChild for PlaylistChildListInner<O>
+impl<O, F> PlaylistChild for PlaylistChildListInner<O, F>
 where
     O: Send + Sync,
+    F: Send + Sync + Clone,
 {
     /// current_title returns the title of current playing song
     async fn current_title(&mut self) -> anyhow::Result<Option<Arc<String>>> {

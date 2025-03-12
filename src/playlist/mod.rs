@@ -1,9 +1,11 @@
+mod from_config;
 mod listener_frame_data;
 mod playlist_child;
 mod playlist_frame_stream;
 mod playlist_struct;
 
 // re-export the modules
+pub use from_config::build_playlist_from_config;
 pub use playlist_child::*;
 pub use playlist_frame_stream::PlaylistFrameStream;
 pub use playlist_struct::{Playlist, PreparedFrame};

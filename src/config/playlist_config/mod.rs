@@ -1,4 +1,4 @@
-use playlist_child::PlaylistChildConfig;
+pub use playlist_child::PlaylistChildConfig;
 
 mod playlist_child;
 

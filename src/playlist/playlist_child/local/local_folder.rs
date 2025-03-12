@@ -38,7 +38,7 @@ impl LocalFolderInner {
         while let Some(entry) = dir.next().await {
             match entry {
                 Ok(path) => {
-                    new_tracks.push((path, file_provider.clone()));
+                    new_tracks.push(path);
                 }
                 Err(e) => {
                     error!("error reading directory: {:?}", e);
@@ -47,7 +47,8 @@ impl LocalFolderInner {
         }
 
         Ok(Self {
-            tracks: LocalFileTrackList::new(new_tracks, Some(repeat), Some(shuffle)).await?,
+            tracks: LocalFileTrackList::new(new_tracks, Some(repeat), Some(shuffle), file_provider)
+                .await?,
         })
     }
 }

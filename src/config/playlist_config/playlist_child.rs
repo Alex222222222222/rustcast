@@ -40,7 +40,7 @@ pub enum PlaylistChildConfig {
         fail_over: Option<Box<PlaylistChildConfig>>,
     },
     Playlists {
-        children: Box<PlaylistChildConfig>,
+        children: Box<Vec<PlaylistChildConfig>>,
         #[serde(default)]
         repeat: Option<bool>,
         #[serde(default)]
@@ -52,12 +52,18 @@ pub enum PlaylistChildConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use static_assertions::assert_impl_all;
 
     impl PlaylistChildConfig {
         pub async fn from_json(json: &str) -> anyhow::Result<Self> {
             let config: PlaylistChildConfig = serde_json::from_str(json)?;
             Ok(config)
         }
+    }
+
+    #[tokio::test]
+    async fn test_playlist_child_config_sync_send() {
+        assert_impl_all!(PlaylistChildConfig: Send, Sync);
     }
 
     #[tokio::test]
@@ -119,21 +125,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_from_json_playlists() {
-        let json = r#"{"Playlists":{"children":{"LocalFolder":{"folder":"/path/to/folder"}}}}"#;
-        let config = PlaylistChildConfig::from_json(json).await.unwrap();
-        match config {
-            PlaylistChildConfig::Playlists { children, .. } => match *children {
-                PlaylistChildConfig::LocalFolder { ref folder, .. } => {
-                    assert_eq!(folder, "/path/to/folder")
-                }
-                _ => panic!("Expected inner LocalFolder variant"),
-            },
-            _ => panic!("Expected Playlists variant"),
-        }
-    }
-
-    #[tokio::test]
     async fn test_from_json_invalid() {
         let json = r#"{"InvalidType":"some_value"}"#;
         assert!(PlaylistChildConfig::from_json(json).await.is_err());
@@ -182,7 +173,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_all_options() {
-        let json = r#"{"Playlists":{"children":{"LocalFolder":{"folder":"/path/to/folder"}},"repeat":true,"shuffle":false,"fail_over":{"Silent":null}}}"#;
+        let json = r#"{"Playlists":{"children":[{"LocalFolder":{"folder":"/path/to/folder"}}],"repeat":true,"shuffle":false,"fail_over":{"Silent":null}}}"#;
         let config = PlaylistChildConfig::from_json(json).await.unwrap();
         match config {
             PlaylistChildConfig::Playlists {

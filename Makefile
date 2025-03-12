@@ -5,6 +5,7 @@ all_checks: clippy test check fmt
 clippy:
 	@echo "Running cargo clippy..."
 	cargo clippy --all-features -- -D warnings
+	cargo clippy --release --all-features -- -D warnings
 
 # Run cargo test
 test:
@@ -15,6 +16,7 @@ test:
 check:
 	@echo "Running cargo check..."
 	cargo check --all-features
+	cargo check --release --all-features
 
 fmt:
 	@echo "Formatting code..."

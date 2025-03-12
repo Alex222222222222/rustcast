@@ -4,12 +4,20 @@ use async_trait::async_trait;
 use futures::Stream;
 
 mod aws;
+mod from_config;
 mod local;
 
 pub use aws::AwsS3FileProvider;
+pub use from_config::build_file_provider;
 pub use local::LocalFileProvider;
 
 #[async_trait]
+/// A trait for file providers.
+/// File providers are responsible for fetching files from a remote source and caching them locally.
+/// File providers should be able to provide a stream of bytes for a given file path.
+///
+/// Local file providers should not create a local cache,
+/// but should be able to provide a stream of bytes for a given file path.
 pub trait FileProvider: Send + Sync {
     /// Get a file local cache path from the file provider.
     /// return the local cache path if the file exists, otherwise None.

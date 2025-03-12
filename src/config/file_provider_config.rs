@@ -1,26 +1,33 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde_json::Value;
+use std::collections::BTreeMap;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(
+    strum::Display, strum::EnumIter, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum AwsS3ConfigKeys {
+    Bucket,
+    Region,
+    AccessKeyId,
+    SecretAccessKey,
+    DefaultRegion,
+    Endpoint,
+    Token,
+    ImdsV1Fallback,
+    VirtualHostedStyleRequest,
+    UnsignedPayload,
+    Checksum,
+    MetadataEndpoint,
+    ContainerCredentialsRelativeUri,
+    SkipSignature,
+    S3Express,
+    RequestPayer,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub enum FileProviderConfig {
-    Local,
-    AwsS3 {
-        bucket: Box<Option<String>>,
-        region: Box<Option<String>>,
-        access_key_id: Box<Option<String>>,
-        secret_access_key: Box<Option<String>>,
-        default_region: Box<Option<String>>,
-        endpoint: Box<Option<String>>,
-        token: Box<Option<String>>,
-        imds_v1_fallback: Option<bool>,
-        virtual_hosted_style_request: Option<bool>,
-        unsigned_payload: Option<bool>,
-        checksum: Option<bool>,
-        metadata_endpoint: Box<Option<String>>,
-        container_credentials_relative_uri: Box<Option<String>>,
-        skip_signature: Option<bool>,
-        s3_express: Option<bool>,
-        request_payer: Box<Option<String>>,
-    },
+    AwsS3(BTreeMap<AwsS3ConfigKeys, Value>),
 }
 
 impl FileProviderConfig {
@@ -30,16 +37,34 @@ impl FileProviderConfig {
     }
 }
 
+impl From<AwsS3ConfigKeys> for object_store::aws::AmazonS3ConfigKey {
+    fn from(value: AwsS3ConfigKeys) -> Self {
+        match value {
+            AwsS3ConfigKeys::Bucket => Self::Bucket,
+            AwsS3ConfigKeys::Region => Self::Region,
+            AwsS3ConfigKeys::AccessKeyId => Self::AccessKeyId,
+            AwsS3ConfigKeys::SecretAccessKey => Self::SecretAccessKey,
+            AwsS3ConfigKeys::DefaultRegion => Self::DefaultRegion,
+            AwsS3ConfigKeys::Endpoint => Self::Endpoint,
+            AwsS3ConfigKeys::Token => Self::Token,
+            AwsS3ConfigKeys::ImdsV1Fallback => Self::ImdsV1Fallback,
+            AwsS3ConfigKeys::VirtualHostedStyleRequest => Self::VirtualHostedStyleRequest,
+            AwsS3ConfigKeys::UnsignedPayload => Self::UnsignedPayload,
+            AwsS3ConfigKeys::Checksum => Self::Checksum,
+            AwsS3ConfigKeys::MetadataEndpoint => Self::MetadataEndpoint,
+            AwsS3ConfigKeys::ContainerCredentialsRelativeUri => {
+                Self::ContainerCredentialsRelativeUri
+            }
+            AwsS3ConfigKeys::SkipSignature => Self::SkipSignature,
+            AwsS3ConfigKeys::S3Express => Self::S3Express,
+            AwsS3ConfigKeys::RequestPayer => Self::RequestPayer,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_from_json_local() {
-        let json = r#"{"Local":null}"#;
-        let config = FileProviderConfig::from_json(json).unwrap();
-        assert!(matches!(config, FileProviderConfig::Local));
-    }
 
     #[test]
     fn test_from_json_aws_s3() {
@@ -49,15 +74,10 @@ mod tests {
                 "region": "us-west-2",
                 "access_key_id": "access-key",
                 "secret_access_key": "secret-key",
-                "default_region": null,
                 "endpoint": "https://s3.amazonaws.com",
-                "token": null,
                 "imds_v1_fallback": true,
                 "virtual_hosted_style_request": false,
-                "unsigned_payload": null,
                 "checksum": true,
-                "metadata_endpoint": null,
-                "container_credentials_relative_uri": null,
                 "skip_signature": false,
                 "s3_express": false,
                 "request_payer": "requester"
@@ -65,33 +85,63 @@ mod tests {
         }"#;
 
         let config = FileProviderConfig::from_json(json).unwrap();
-
-        if let FileProviderConfig::AwsS3 {
-            bucket,
-            region,
-            access_key_id,
-            secret_access_key,
-            endpoint,
-            imds_v1_fallback,
-            virtual_hosted_style_request,
-            checksum,
-            skip_signature,
-            s3_express,
-            request_payer,
-            ..
-        } = config
-        {
-            assert_eq!(*bucket, Some("test-bucket".to_string()));
-            assert_eq!(*region, Some("us-west-2".to_string()));
-            assert_eq!(*access_key_id, Some("access-key".to_string()));
-            assert_eq!(*secret_access_key, Some("secret-key".to_string()));
-            assert_eq!(*endpoint, Some("https://s3.amazonaws.com".to_string()));
-            assert_eq!(imds_v1_fallback, Some(true));
-            assert_eq!(virtual_hosted_style_request, Some(false));
-            assert_eq!(checksum, Some(true));
-            assert_eq!(skip_signature, Some(false));
-            assert_eq!(s3_express, Some(false));
-            assert_eq!(*request_payer, Some("requester".to_string()));
+        if let FileProviderConfig::AwsS3(config) = config {
+            assert_eq!(
+                config.get(&AwsS3ConfigKeys::Bucket),
+                Some(&serde_json::Value::String("test-bucket".to_string()))
+            );
+            assert_eq!(
+                config.get(&AwsS3ConfigKeys::Region),
+                Some(&serde_json::Value::String("us-west-2".to_string()))
+            );
+            assert_eq!(
+                config.get(&AwsS3ConfigKeys::AccessKeyId),
+                Some(&serde_json::Value::String("access-key".to_string()))
+            );
+            assert_eq!(
+                config.get(&AwsS3ConfigKeys::SecretAccessKey),
+                Some(&serde_json::Value::String("secret-key".to_string()))
+            );
+            assert_eq!(
+                config.get(&AwsS3ConfigKeys::Endpoint),
+                Some(&serde_json::Value::String(
+                    "https://s3.amazonaws.com".to_string()
+                ))
+            );
+            assert_eq!(
+                config
+                    .get(&AwsS3ConfigKeys::ImdsV1Fallback)
+                    .and_then(|v| v.as_bool()),
+                Some(true)
+            );
+            assert_eq!(
+                config
+                    .get(&AwsS3ConfigKeys::VirtualHostedStyleRequest)
+                    .and_then(|v| v.as_bool()),
+                Some(false)
+            );
+            assert_eq!(
+                config
+                    .get(&AwsS3ConfigKeys::Checksum)
+                    .and_then(|v| v.as_bool()),
+                Some(true)
+            );
+            assert_eq!(
+                config
+                    .get(&AwsS3ConfigKeys::SkipSignature)
+                    .and_then(|v| v.as_bool()),
+                Some(false)
+            );
+            assert_eq!(
+                config
+                    .get(&AwsS3ConfigKeys::S3Express)
+                    .and_then(|v| v.as_bool()),
+                Some(false)
+            );
+            assert_eq!(
+                config.get(&AwsS3ConfigKeys::RequestPayer),
+                Some(&serde_json::Value::String("requester".to_string()))
+            );
         } else {
             panic!("Expected AwsS3 variant");
         }

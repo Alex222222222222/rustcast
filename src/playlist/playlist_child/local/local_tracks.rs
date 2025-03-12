@@ -10,14 +10,15 @@ use async_trait::async_trait;
 use bytes::Bytes;
 
 pub struct LocalFileTrackList {
-    t: PlaylistChildList<(String, Arc<dyn FileProvider>)>,
+    t: PlaylistChildList<String, Arc<dyn FileProvider>>,
 }
 
 impl LocalFileTrackList {
     pub async fn new(
-        tracks: Vec<(String, Arc<dyn FileProvider>)>,
+        tracks: Vec<String>,
         repeat: Option<bool>,
         shuffle: Option<bool>,
+        file_provider: Arc<dyn FileProvider>,
     ) -> anyhow::Result<Self> {
         type PlaylistChildOutPin = Pin<
             Box<
@@ -26,20 +27,16 @@ impl LocalFileTrackList {
             >,
         >;
 
-        fn init_fn(t: (String, Arc<dyn FileProvider>)) -> PlaylistChildOutPin {
+        fn init_fn(t: String, f: Arc<dyn FileProvider>) -> PlaylistChildOutPin {
             Box::pin(async move {
-                Ok(Box::new(LocalFileTrack::new(t.0, t.1, Some(false)).await?)
+                Ok(Box::new(LocalFileTrack::new(t, f, Some(false)).await?)
                     as Box<dyn PlaylistChild>)
             })
         }
-        let t: PlaylistChildList<(String, Arc<dyn FileProvider>)> =
-            PlaylistChildList::<(String, Arc<dyn FileProvider>)>::new(
-                tracks,
-                repeat,
-                shuffle,
-                Some(init_fn),
-            )
-            .await?;
+
+        let t: PlaylistChildList<String, Arc<dyn FileProvider>> =
+            PlaylistChildList::new(tracks, repeat, shuffle, Some(file_provider), Some(init_fn))
+                .await?;
         Ok(Self { t })
     }
 }
