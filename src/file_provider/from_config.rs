@@ -3,9 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::Ok;
 use object_store::aws::AmazonS3Builder;
 
-use crate::AwsS3FileProvider;
-
-use super::FileProvider;
+use super::{FileProvider, aws::AwsS3FileProvider, gcp::GoogleCouldStorageFileProvider};
 
 // TODO add cache dir functionality
 
@@ -33,6 +31,15 @@ pub async fn build_file_provider(
                 }
 
                 Arc::new(AwsS3FileProvider::new(s3_builder).await?)
+            }
+            crate::config::FileProviderConfig::GoogleCloudStorage(keys) => {
+                let mut gcp_builder = object_store::gcp::GoogleCloudStorageBuilder::new();
+                for (key, value) in keys {
+                    gcp_builder =
+                        gcp_builder.with_config(key.into(), serde_json_value_to_string(value)?)
+                }
+
+                Arc::new(GoogleCouldStorageFileProvider::new(gcp_builder).await?)
             }
         };
         res.insert(name, provider);

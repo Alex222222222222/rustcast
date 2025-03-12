@@ -5,9 +5,9 @@ use futures::Stream;
 
 mod aws;
 mod from_config;
+mod gcp;
 mod local;
 
-pub use aws::AwsS3FileProvider;
 pub use from_config::build_file_provider;
 pub use local::LocalFileProvider;
 

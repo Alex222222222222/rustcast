@@ -1,8 +1,10 @@
 use object_store::ClientConfigKey;
 
 mod aws;
+mod gcp;
 
 pub use aws::AwsS3Downloader;
+pub use gcp::GcpDownloader;
 
 static CLIENT_CONFIG_KEYS: &[ClientConfigKey; 17] = &[
     ClientConfigKey::AllowHttp,
