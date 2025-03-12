@@ -4,7 +4,7 @@ use crate::{FileProvider, playlist::PlaylistChild};
 use async_trait::async_trait;
 use bytes::Bytes;
 use derive_lazy_playlist_child::LazyPlaylistChild;
-use log::error;
+use log::{debug, error};
 use tokio_stream::StreamExt;
 
 use super::LocalFileTrackList;
@@ -45,6 +45,7 @@ impl LocalFolderInner {
                 }
             }
         }
+        debug!("Get files: {}", new_tracks.len());
 
         Ok(Self {
             tracks: LocalFileTrackList::new(new_tracks, Some(repeat), Some(shuffle), file_provider)

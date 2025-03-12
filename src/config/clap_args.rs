@@ -18,6 +18,6 @@ pub struct ClapArgs {
     /// "stdout" are special values that will log to your terminal.
     /// If not specified, logs will only be written to stdout.
     /// If specified, the `log_file` field in the configuration file will be ignored.
-    #[arg(short, long)]
+    #[arg(long)]
     pub log_file: Vec<String>,
 }

@@ -59,6 +59,7 @@ async fn main() -> anyhow::Result<()> {
             path,
             playlist,
         } = shoutcast_config;
+        let path = path.trim_matches('/').to_string();
 
         let playlist = match playlists.get(&playlist) {
             Some(playlist) => playlist.clone(),

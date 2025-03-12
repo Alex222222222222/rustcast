@@ -39,6 +39,10 @@ impl From<LogLevel> for log::LevelFilter {
 #[cfg(not(debug_assertions))]
 pub async fn set_log_output(level: Option<LogLevel>, output: &Vec<String>) -> anyhow::Result<()> {
     let level = level.unwrap_or_default();
+    let output = match output.is_empty() {
+        true => &vec!["stdout".to_string()],
+        false => output,
+    };
     let mut builder = fern::Dispatch::new()
         // Perform allocation-free log formatting
         .format(|out, message, record| {

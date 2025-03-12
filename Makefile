@@ -28,6 +28,10 @@ build_commit_diff:
 	@echo "Building diff..."
 	git diff --cached --diff-algorithm=minimal > diff.txt
 
+clean_commit_diff:
+	@echo "Cleaning commit history..."
+	rm commits.txt diff.txt
+
 # Clean the project
 clean:
 	@echo "Cleaning project..."

@@ -94,21 +94,35 @@ async fn next(s: Entries) -> Option<anyhow::Result<String>> {
 
         let e = match s_d.next().await {
             Some(Ok(e)) => e,
-            Some(Err(e)) => return Some(Err(e.into())),
+            Some(Err(e)) => {
+                let mut s_lock = s.lock().await;
+                s_lock.replace(Box::new(s_d));
+                return Some(Err(e.into()));
+            }
             None => return None,
         };
 
         let t = match e.file_type().await {
             Ok(t) => t,
-            Err(e) => return Some(Err(e.into())),
+            Err(e) => {
+                let mut s_lock = s.lock().await;
+                s_lock.replace(Box::new(s_d));
+                return Some(Err(e.into()));
+            }
         };
         if t.is_file() {
+            let mut s_lock = s.lock().await;
+            s_lock.replace(Box::new(s_d));
             return Some(Ok(e.path().to_string_lossy().to_string()));
         }
 
         let entries = match tokio::fs::read_dir(e.path()).await {
             Ok(e) => e,
-            Err(_) => continue,
+            Err(_) => {
+                let mut s_lock = s.lock().await;
+                s_lock.replace(Box::new(s_d));
+                continue;
+            }
         };
         let stream = tokio_stream::wrappers::ReadDirStream::new(entries);
 
