@@ -88,7 +88,7 @@ RustCast uses a JSON configuration file to define playlists, file providers, and
 }
 ```
 
-## Command Line Usage
+### Command Line Usage
 
 Thanks to the [clap](https://crates.io/crates/clap) crate,
 additional parameters can be specified via command line arguments,
@@ -400,6 +400,30 @@ Alternative with inline credentials:
     "service_account_key": "{\"type\": \"service_account\", ...}"
 }
 ```
+
+### Output Configuration
+
+The `outputs` field should be an array of output objects, each defining a Shoutcast output.
+Example configuration:
+
+```json
+"outputs": [
+    {
+        "host": "0.0.0.0",
+        "port": 8000,
+        "path": "/stream",
+        "playlist": "main"
+    }
+],
+```
+
+The output object has the following properties:
+- `host`: The IP address to bind the server to
+- `port`: The port to listen on
+- `path`: The path to the stream
+- `playlist`: The name of the playlist to stream
+
+Then you can connect to the server using a media player like VLC or Winamp by entering the URL `http://<host>:<port>/<path>`.
 
 ## Development
 
