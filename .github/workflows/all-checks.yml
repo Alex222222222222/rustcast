@@ -1,7 +1,7 @@
 name: Run All Checks
 
 on:
-  push:
+  pull_request:
     branches:
       - master
   workflow_dispatch: # Allows manual triggering from the GitHub Actions UI
