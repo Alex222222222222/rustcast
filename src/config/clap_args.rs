@@ -2,7 +2,7 @@ use clap::Parser;
 
 use super::log_level::LogLevel;
 
-/// Simple program to greet a person
+/// RustCast is a robust and efficient Shoutcast streaming server written in Rust.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct ClapArgs {

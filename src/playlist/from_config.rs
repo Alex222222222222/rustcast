@@ -51,23 +51,23 @@ async fn build_playlist_child_from_config(
                  crate::playlist::LocalFileTrackList::new(files, repeat, shuffle, file_provider).await?,
              )
          },
-         PlaylistChildConfig::S3Folder { folder, s3_client, repeat, shuffle, ..
+         PlaylistChildConfig::RemoteFolder { folder, remote_client, repeat, shuffle, ..
              // TODO add fail_over functionality
          } => {
-             let file_provider = match file_provider.get(&s3_client){
+             let file_provider = match file_provider.get(&remote_client){
                  Some(provider) => provider.clone(),
-                 None => return Err(anyhow::anyhow!("No file provider found for {}", s3_client)),
+                 None => return Err(anyhow::anyhow!("No file provider found for {}", remote_client)),
              };
              Box::new(
                  crate::playlist::LocalFolder::new(folder, repeat, shuffle, file_provider).await?,
              )
          },
-         PlaylistChildConfig::S3Files { files, s3_client, repeat, shuffle, ..
+         PlaylistChildConfig::RemoteFiles { files, remote_client, repeat, shuffle, ..
         // TODO add fail_over functionality
          } => {
-             let file_provider = match file_provider.get(&s3_client){
+             let file_provider = match file_provider.get(&remote_client){
                  Some(provider) => provider.clone(),
-                 None => return Err(anyhow::anyhow!("No file provider found for {}", s3_client)),
+                 None => return Err(anyhow::anyhow!("No file provider found for {}", remote_client)),
              };
              Box::new(
                  crate::playlist::LocalFileTrackList::new(files, repeat, shuffle, file_provider).await?,

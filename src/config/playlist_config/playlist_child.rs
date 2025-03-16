@@ -19,9 +19,9 @@ pub enum PlaylistChildConfig {
         #[serde(default)]
         fail_over: Option<Box<PlaylistChildConfig>>,
     },
-    S3Folder {
+    RemoteFolder {
         folder: String,
-        s3_client: String,
+        remote_client: String,
         #[serde(default)]
         repeat: Option<bool>,
         #[serde(default)]
@@ -29,9 +29,9 @@ pub enum PlaylistChildConfig {
         #[serde(default)]
         fail_over: Option<Box<PlaylistChildConfig>>,
     },
-    S3Files {
+    RemoteFiles {
         files: Vec<String>,
-        s3_client: String,
+        remote_client: String,
         #[serde(default)]
         repeat: Option<bool>,
         #[serde(default)]
@@ -94,31 +94,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_from_json_s3_folder() {
-        let json = r#"{"S3Folder":{"folder":"bucket/folder","s3_client":"default"}}"#;
+        let json = r#"{"RemoteFolder":{"folder":"bucket/folder","remote_client":"default"}}"#;
         let config = PlaylistChildConfig::from_json(json).await.unwrap();
         match config {
-            PlaylistChildConfig::S3Folder {
-                folder, s3_client, ..
+            PlaylistChildConfig::RemoteFolder {
+                folder,
+                remote_client,
+                ..
             } => {
                 assert_eq!(folder, "bucket/folder");
-                assert_eq!(s3_client, "default");
+                assert_eq!(remote_client, "default");
             }
             _ => panic!("Expected S3Folder variant"),
         }
     }
 
     #[tokio::test]
-    async fn test_from_json_s3_files() {
-        let json = r#"{"S3Files":{"files":["bucket/file1.mp3","bucket/file2.mp3"],"s3_client":"default"}}"#;
+    async fn test_from_json_remote_files() {
+        let json = r#"{"RemoteFiles":{"files":["bucket/file1.mp3","bucket/file2.mp3"],"remote_client":"default"}}"#;
         let config = PlaylistChildConfig::from_json(json).await.unwrap();
         match config {
-            PlaylistChildConfig::S3Files {
-                files, s3_client, ..
+            PlaylistChildConfig::RemoteFiles {
+                files,
+                remote_client,
+                ..
             } => {
                 assert_eq!(files.len(), 2);
                 assert_eq!(files[0], "bucket/file1.mp3");
                 assert_eq!(files[1], "bucket/file2.mp3");
-                assert_eq!(s3_client, "default");
+                assert_eq!(remote_client, "default");
             }
             _ => panic!("Expected S3Files variant"),
         }
@@ -157,10 +161,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_fail_over_option() {
-        let json = r#"{"S3Folder":{"folder":"bucket/folder","s3_client":"default","fail_over":{"Silent":null}}}"#;
+        let json = r#"{"RemoteFolder":{"folder":"bucket/folder","remote_client":"default","fail_over":{"Silent":null}}}"#;
         let config = PlaylistChildConfig::from_json(json).await.unwrap();
         match config {
-            PlaylistChildConfig::S3Folder { fail_over, .. } => {
+            PlaylistChildConfig::RemoteFolder { fail_over, .. } => {
                 assert!(fail_over.is_some());
                 match *fail_over.unwrap() {
                     PlaylistChildConfig::Silent => {}
