@@ -1,0 +1,114 @@
+name: Build and Release
+
+on:
+  pull_request:
+    types:
+      - closed
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    if: github.event.pull_request.merged
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-13, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history for changelog generation
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Determine artifact name
+        id: artifact-name
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            echo "ARTIFACT_NAME=rustcast-${{ matrix.os }}.exe" >> $GITHUB_ENV
+          else
+            echo "ARTIFACT_NAME=rustcast-${{ matrix.os }}" >> $GITHUB_ENV
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: |
+            target/release/rustcast
+            target/release/rustcast.exe
+          if-no-files-found: ignore
+
+  create_release:
+    name: Create GitHub Release
+    needs: build
+    if: github.event.pull_request.merged
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history for changelog generation
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          CHANGELOG=$(git log -5 --pretty=format:"* %s (%h)" --abbrev-commit)
+          echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+          echo "$CHANGELOG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Delete existing 'latest-build' release
+        uses: dev-drprasad/delete-tag-and-release@v0.2.1
+        with:
+          delete_release: true
+          tag_name: latest-build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true # Continue even if no previous release exists
+
+      - name: Create new 'latest-build' release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest-build
+          name: Latest Build
+          body: |
+            Latest build for commit ${{ github.sha }}
+
+            ## Recent changes:
+            ${{ env.CHANGELOG }}
+
+            *This is an automated prerelease build from a merged PR to the master branch.*
+          files: artifacts/**
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

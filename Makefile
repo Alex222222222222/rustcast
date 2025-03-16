@@ -20,7 +20,7 @@ check:
 
 fmt:
 	@echo "Formatting code..."
-	cargo fmt --all
+	cargo fmt --all -- --check
 
 build_commit_diff:
 	@echo "Building recent commits history..."
