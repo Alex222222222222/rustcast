@@ -107,7 +107,7 @@ mod tests {
             },
             "outputs": [
                 {
-                    "host": "localhost",
+                    "host": "127.0.0.1",
                     "port": 8000,
                     "path": "/stream",
                     "playlist": "main"
@@ -186,7 +186,7 @@ mod tests {
         }
 
         assert_eq!(config.outputs.len(), 1);
-        assert_eq!(config.outputs[0].host, "localhost");
+        assert_eq!(config.outputs[0].host, "127.0.0.1");
         assert_eq!(config.outputs[0].port, 8000);
         assert_eq!(config.outputs[0].path, "/stream");
         assert_eq!(config.outputs[0].playlist, "main");
@@ -204,7 +204,7 @@ mod tests {
             },
             "outputs": [
                 {
-                    "host": "localhost",
+                    "host": "127.0.0.1",
                     "port": 8000,
                     "playlist": "main"
                 }
