@@ -50,8 +50,10 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            mv target/release/rustcast target/release/rustcast-${{ matrix.os }}.exe
             echo "ARTIFACT_NAME=rustcast-${{ matrix.os }}.exe" >> $GITHUB_ENV
           else
+            mv target/release/rustcast target/release/rustcast-${{ matrix.os }}
             echo "ARTIFACT_NAME=rustcast-${{ matrix.os }}" >> $GITHUB_ENV
           fi
 
@@ -60,8 +62,8 @@ jobs:
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: |
-            target/release/rustcast
-            target/release/rustcast.exe
+            target/release/rustcast-${{ matrix.os }}
+            target/release/rustcast-${{ matrix.os }}.exe
           if-no-files-found: ignore
 
   create_release:
