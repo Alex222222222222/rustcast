@@ -1,5 +1,8 @@
 name: Build and Release
 
+permissions:
+  contents: write
+
 on:
   pull_request:
     types:
@@ -97,7 +100,7 @@ jobs:
 
       - name: Create new 'latest-build' release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-build
           name: Latest Build
