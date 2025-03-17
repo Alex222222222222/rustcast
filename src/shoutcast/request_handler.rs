@@ -112,13 +112,31 @@ impl RequestHandler {
             Some(v) => Some(v.to_str()?.to_string()),
             None => None,
         };
+        let listener_id = match &session_id {
+            Some(session_id) => {
+                let listener_id = playlist.get_listener_id_from_session_id(session_id).await;
+                let listener_id = match listener_id {
+                    Some(listener_id) => {
+                        debug!("Get cached session id");
+                        listener_id
+                    }
+                    None => CONTEXT.get_id().await,
+                };
+                playlist
+                    .log_session_id(session_id.clone(), listener_id)
+                    .await;
+
+                listener_id
+            }
+            None => CONTEXT.get_id().await,
+        };
         Ok(Self {
             sink: MySink(sink),
             playlist,
             meta_data_support,
             id: ListenerID {
+                listener_id,
                 session_id,
-                listener_id: CONTEXT.get_id().await,
             },
             title: Arc::new("".to_string()),
             artist: Arc::new("".to_string()),

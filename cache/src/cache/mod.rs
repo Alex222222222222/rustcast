@@ -180,18 +180,13 @@ impl Cache {
 
         info!("Starting download of {}", file_meta.location);
 
-        let mut bytes_downloaded = 0;
         while let Some(b) = response.next().await {
             let b = b?;
-            bytes_downloaded += b.len();
             tempfile_write_handle.write_all(&b).await?;
         }
 
-        info!("Downloaded {} bytes", bytes_downloaded);
         tempfile_write_handle.flush().await?;
         drop(tempfile_write_handle);
-
-        debug!("Writing meta file");
 
         let meta = Meta::new(path.into(), file_meta.clone(), self.freshness_lifetime);
         meta.to_file().await?;
@@ -207,7 +202,6 @@ impl Cache {
     }
 
     pub async fn get_file_meta(&self, resource: &str) -> Result<FileMetadata, Error> {
-        debug!("Fetching ETAG for {}", resource);
         self.file_downloader.get_meta(resource).await
     }
 

@@ -14,8 +14,8 @@ use request_handler::RequestHandler;
 
 #[derive(Debug)]
 pub struct ListenerID {
-    pub session_id: Option<String>,
     pub listener_id: usize,
+    pub session_id: Option<String>,
 }
 
 pub async fn listen(host: String, port: u16, playlists: Arc<HashMap<String, Arc<Playlist>>>) {

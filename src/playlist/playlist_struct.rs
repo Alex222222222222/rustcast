@@ -132,6 +132,20 @@ impl Playlist {
     pub async fn get_frame_with_id(&self, id: &ListenerID) -> Option<PreparedFrame> {
         self.listener_frame_data_db.get_frame_with_id(id).await
     }
+
+    /// Get the listener_id from the session_id, if the session_id is not found, return None
+    pub async fn get_listener_id_from_session_id(&self, session_id: &str) -> Option<usize> {
+        self.listener_frame_data_db
+            .get_listener_id_from_session_id(session_id)
+            .await
+    }
+
+    /// log session_id to listener_id
+    pub async fn log_session_id(&self, session_id: String, listener_id: usize) {
+        self.listener_frame_data_db
+            .log_session_id(session_id, listener_id)
+            .await;
+    }
 }
 
 /// A linked list of frames that is zero-copy and can be used to stream frames to a client.

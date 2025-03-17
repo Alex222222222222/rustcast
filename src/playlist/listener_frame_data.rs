@@ -7,6 +7,8 @@ use crate::{playlist::MAX_WRITE_AHEAD_DURATION, shoutcast::ListenerID};
 
 use super::PreparedFrame;
 
+const LISTENER_ID_KEEP_ALIVE_DURATION: u64 = 1000 * 60 * 5; // 5 minutes
+
 pub struct ListenerFrameData {
     session_id_2_listener_id: moka::future::Cache<String, usize>,
     listener_id_2_frame: moka::future::Cache<usize, PreparedFrame>,
@@ -19,11 +21,11 @@ impl ListenerFrameData {
     pub fn new(current_frame: Arc<Mutex<PreparedFrame>>) -> Self {
         let session_id_2_listener_id: moka::future::Cache<String, usize> =
             moka::future::Cache::builder()
-                .time_to_idle(Duration::from_millis(MAX_WRITE_AHEAD_DURATION as u64))
+                .time_to_idle(Duration::from_millis(LISTENER_ID_KEEP_ALIVE_DURATION))
                 .build();
         let listener_id_2_frame: moka::future::Cache<usize, PreparedFrame> =
             moka::future::Cache::builder()
-                .time_to_idle(Duration::from_millis(MAX_WRITE_AHEAD_DURATION as u64))
+                .time_to_idle(Duration::from_millis(LISTENER_ID_KEEP_ALIVE_DURATION))
                 .build();
         let current_frame1 = current_frame.clone();
         let eviction_listener = move |k: Arc<(usize, usize)>, _, _| -> ListenerFuture {
@@ -69,10 +71,7 @@ impl ListenerFrameData {
     pub async fn log_current_frame(&self, listener_id: &ListenerID, frame: PreparedFrame) {
         // refresh session_id_2_listener_id
         if let Some(session_id) = &listener_id.session_id {
-            // TODO Optimize this
-            self.session_id_2_listener_id
-                .insert(session_id.clone(), listener_id.listener_id)
-                .await;
+            self.session_id_2_listener_id.get(session_id).await;
         }
         self.listener_id_frame_group
             .insert((listener_id.listener_id, frame.id), ())
@@ -82,14 +81,19 @@ impl ListenerFrameData {
             .await;
     }
 
-    pub async fn get_frame_with_id(&self, id: &ListenerID) -> Option<PreparedFrame> {
-        if let Some(session_id) = &id.session_id {
-            let l_id = self.session_id_2_listener_id.get(session_id).await;
-            if let Some(l_id) = l_id {
-                return self.listener_id_2_frame.get(&l_id).await;
-            }
-        }
+    /// log session_id to listener_id
+    pub async fn log_session_id(&self, session_id: String, listener_id: usize) {
+        self.session_id_2_listener_id
+            .insert(session_id, listener_id)
+            .await;
+    }
 
+    pub async fn get_frame_with_id(&self, id: &ListenerID) -> Option<PreparedFrame> {
         self.listener_id_2_frame.get(&id.listener_id).await
+    }
+
+    /// Get the listener_id from the session_id, if the session_id is not found, return None
+    pub async fn get_listener_id_from_session_id(&self, session_id: &str) -> Option<usize> {
+        self.session_id_2_listener_id.get(session_id).await
     }
 }
