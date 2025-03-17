@@ -162,28 +162,22 @@ impl RequestHandler {
                     return Ok(());
                 }
             };
-            self.title = frame.title.clone();
-            self.artist = frame.artist.clone();
+            self.title = frame.frame_with_meta.title.clone();
+            self.artist = frame.frame_with_meta.artist.clone();
 
             self.playlist
                 .log_current_frame(&self.id, frame.clone())
                 .await;
 
             bytes_before_next_meta_data = self
-                .write_frame(frame.frame, bytes_before_next_meta_data)
+                .write_frame(frame.frame_with_meta.frame, bytes_before_next_meta_data)
                 .await?;
         }
     }
 
     /// writeStreamStartResponse writes the start response to the client.
     async fn write_stream_start_response(&mut self) -> anyhow::Result<()> {
-        let content_type = match self.playlist.content_type().await? {
-            Some(content_type) => content_type,
-            None => {
-                debug!("content type is none");
-                return Err(anyhow::anyhow!("content type is none"));
-            }
-        };
+        let content_type = self.playlist.get_content_type().await;
 
         debug!("write stream start response");
         self.sink.send("ICY 200 OK\r\n").await?;

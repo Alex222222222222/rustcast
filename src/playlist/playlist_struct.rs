@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use log::debug;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, mpsc::Receiver};
+use tokio_stream::StreamExt;
 
 use crate::{CONTEXT, shoutcast::ListenerID};
 
-use super::{PlaylistChild, listener_frame_data::ListenerFrameData};
+use super::{FrameWithMeta, PlaylistChild, listener_frame_data::ListenerFrameData};
 
 /// We keep a linked list of `PreparedFrame` to stream to the client,
 ///     each `prepared_frame` is wrapped in an `Arc<Mutex<PreparedFrame>>`
@@ -33,27 +34,68 @@ use super::{PlaylistChild, listener_frame_data::ListenerFrameData};
 ///     `oldest_prepared_frames` to match the smallest frame id in the db.
 pub struct Playlist {
     pub name: Arc<String>,
-    child: Arc<Mutex<Box<dyn PlaylistChild>>>,
+    finished: Mutex<bool>,
+    child_recv: Mutex<Receiver<anyhow::Result<FrameWithMeta>>>,
     newest_prepared_frames: Mutex<PreparedFrame>,
     listener_frame_data_db: ListenerFrameData,
+    content_type: Mutex<Arc<String>>,
 }
 
 impl Playlist {
-    pub async fn new(name: String, child: Arc<Mutex<Box<dyn PlaylistChild>>>) -> Self {
+    pub async fn new(name: String, child: Box<dyn PlaylistChild>) -> Self {
         let frame = PreparedFrame {
-            frame: Bytes::new(),
-            duration: 0.0,
+            frame_with_meta: FrameWithMeta {
+                frame: Bytes::new(),
+                duration: 0.0,
+                title: Arc::new("".to_string()),
+                artist: Arc::new("".to_string()),
+                content_type: Arc::new("".to_string()),
+            },
             id: CONTEXT.get_id().await,
             next: Arc::new(Mutex::new(None)),
-            title: Arc::new("".to_string()),
-            artist: Arc::new("".to_string()),
         };
+
+        let (sender, child_recv) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            let mut child = child;
+            let stream = child.stream_frame_with_meta().await;
+            // if err, send the err to the receiver
+            if let Err(e) = stream {
+                let e = sender.send(Err(e)).await;
+                if let Err(e) = e {
+                    log::error!("failed to send error to child_recv: {}", e);
+                }
+                return;
+            }
+            let mut stream = stream.unwrap();
+
+            while let Some(frame_with_meta) = stream.next().await {
+                match sender.send(frame_with_meta).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        // the receiver is dropped, we should stop the stream
+                        log::error!("failed to send frame_with_meta: {}", e);
+                        return;
+                    }
+                }
+            }
+
+            // the stream is finished, the sender is dropped
+        });
+
         Self {
             name: name.into(),
-            child,
+            child_recv: (Mutex::new(child_recv)),
+            finished: Mutex::new(false),
             newest_prepared_frames: Mutex::new(frame.clone()),
             listener_frame_data_db: ListenerFrameData::new(Arc::new(Mutex::new(frame.clone()))),
+            content_type: Mutex::new(frame.frame_with_meta.content_type),
         }
+    }
+
+    /// get the content type of the playlist
+    pub async fn get_content_type(&self) -> Arc<String> {
+        self.content_type.lock().await.clone()
     }
 
     /// log the listener current frame
@@ -63,14 +105,9 @@ impl Playlist {
             .await;
     }
 
-    /// return the current content type of the playlist
-    pub async fn content_type(&self) -> anyhow::Result<Option<Arc<String>>> {
-        self.child.lock().await.content_type().await
-    }
-
     /// check if the Playlist is finished
     pub async fn is_finished(&self) -> anyhow::Result<bool> {
-        self.child.lock().await.is_finished().await
+        Ok(*self.finished.lock().await)
     }
 
     pub async fn get_oldest_prepared_frames(&self) -> PreparedFrame {
@@ -93,31 +130,22 @@ impl Playlist {
         }
         drop(newest_prepared_frames);
 
-        let mut child = self.child.lock().await;
-        let (frame, title, artist) = match child.next_frame_with_meta().await? {
-            Some(frame) => frame,
+        let frame_with_meta = match self.child_recv.lock().await.recv().await {
+            Some(frame) => frame?,
             None => {
                 // the child is finished
+                *self.finished.lock().await = true;
                 return Ok(());
             }
         };
-        let byte_per_millisecond = match child.byte_per_millisecond().await? {
-            Some(byte_per_millisecond) => byte_per_millisecond,
-            None => {
-                // the child is finished
-                return Ok(());
-            }
-        };
-        let duration = frame.len() as f64 / byte_per_millisecond;
-        drop(child);
+
+        // set the content type of the playlist
+        *self.content_type.lock().await = frame_with_meta.content_type.clone();
 
         let prepared_frame = PreparedFrame {
             id: CONTEXT.get_id().await,
-            frame,
-            duration,
+            frame_with_meta,
             next: Arc::new(Mutex::new(None)),
-            title,
-            artist,
         };
 
         let mut newest_prepared_frames = self.newest_prepared_frames.lock().await;
@@ -151,14 +179,10 @@ impl Playlist {
 /// A linked list of frames that is zero-copy and can be used to stream frames to a client.
 #[derive(Clone)]
 pub struct PreparedFrame {
-    pub frame: Bytes,
-    /// duration of the frame in milliseconds calculated from the frame size and bitrate
-    pub duration: f64,
+    pub frame_with_meta: FrameWithMeta,
     /// id of the frame that is used to track the order of the frames
     /// should be monotonically increasing
     pub id: usize,
-    pub title: Arc<String>,
-    pub artist: Arc<String>,
     next: Arc<Mutex<Option<PreparedFrame>>>,
 }
 

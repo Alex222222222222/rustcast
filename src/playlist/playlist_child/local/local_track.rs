@@ -1,3 +1,5 @@
+use super::super::FrameWithMeta;
+use async_stream::stream;
 use async_trait::async_trait;
 use core::str;
 use derive_lazy_playlist_child::LazyPlaylistChild;
@@ -109,7 +111,7 @@ async fn get_meta_data_from_file(
 
 #[derive(LazyPlaylistChild)]
 pub struct LocalFileTrackInner {
-    path: String,
+    path: Arc<String>,
     file_provider: Arc<dyn FileProvider>,
     title: Arc<String>,
     artist: Arc<String>,
@@ -117,12 +119,11 @@ pub struct LocalFileTrackInner {
     repeat: bool,
     played: bool,
     byte_per_millisecond: f64,
-    current_stream: Option<Box<dyn AsyncRead + Send + Sync + Unpin>>,
 }
 
 impl LocalFileTrackInner {
     pub async fn new(
-        path: String,
+        path: Arc<String>,
         file_provider: Arc<dyn FileProvider>,
         repeat: bool,
     ) -> anyhow::Result<Self> {
@@ -130,7 +131,7 @@ impl LocalFileTrackInner {
 
         if meta_data.title.is_none() || meta_data.artist.is_none() {
             debug!("failed to get title and artist from id3 tag, trying to get from file name");
-            let file_name = match std::path::Path::new(&path)
+            let file_name = match std::path::Path::new(path.as_str())
                 .file_name()
                 .and_then(std::ffi::OsStr::to_str)
             {
@@ -170,7 +171,6 @@ impl LocalFileTrackInner {
             repeat,
             played: false,
             byte_per_millisecond: meta_data.byte_per_millisecond,
-            current_stream: None,
         })
     }
 }
@@ -187,75 +187,47 @@ impl LocalFileTrackInner {
 
 #[async_trait]
 impl PlaylistChild for LocalFileTrackInner {
-    async fn current_title(&mut self) -> anyhow::Result<Option<Arc<String>>> {
-        if self.played && !self.repeat {
-            return Ok(None);
-        }
-        Ok(Some(self.title.clone()))
-    }
-
-    async fn current_artist(&mut self) -> anyhow::Result<Option<Arc<String>>> {
-        if self.played && !self.repeat {
-            return Ok(None);
-        }
-        Ok(Some(self.artist.clone()))
-    }
-
-    async fn content_type(&mut self) -> anyhow::Result<Option<Arc<String>>> {
-        if self.played && !self.repeat {
-            return Ok(None);
-        }
-        Ok(Some(self.content_type.clone()))
-    }
-
-    async fn byte_per_millisecond(&mut self) -> anyhow::Result<Option<f64>> {
-        if self.played && !self.repeat {
-            return Ok(None);
-        }
-        Ok(Some(self.byte_per_millisecond))
-    }
-
-    async fn next_frame(&mut self) -> anyhow::Result<Option<bytes::Bytes>> {
-        if self.played && !self.repeat {
-            self.current_stream = None;
-            return Ok(None);
-        }
-
-        if self.current_stream.is_none() {
-            let stream = self.new_stream().await?;
-            self.current_stream = Some(stream);
-        }
-
-        let mut stream = self.current_stream.take().unwrap();
-        let mut buf = vec![0; DEFAULT_FRAME_SIZE];
-        let mut read = stream.read(&mut buf).await?;
-        if read == 0 {
-            self.current_stream = None;
-            self.played = true;
-            if !self.repeat {
-                return Ok(None);
-            }
-
-            stream = self.new_stream().await?;
-            read = stream.read(&mut buf).await?;
-            if read == 0 {
-                self.current_stream = None;
-                anyhow::bail!("failed to read from file: {}", self.path);
-            }
-        }
-
-        let frame = bytes::Bytes::from(buf).slice(0..read);
-        self.current_stream = Some(stream);
-        return Ok(Some(frame));
-    }
-
     async fn is_finished(&mut self) -> anyhow::Result<bool> {
         Ok(self.played && !self.repeat)
     }
 
-    async fn reset(&mut self) -> anyhow::Result<()> {
-        self.played = false;
-        self.current_stream = None;
-        Ok(())
+    async fn stream_frame_with_meta(
+        &'_ mut self,
+    ) -> anyhow::Result<
+        std::pin::Pin<Box<dyn futures::Stream<Item = anyhow::Result<FrameWithMeta>> + Send + '_>>,
+    > {
+        let s = stream! {
+            loop {
+                let mut stream = self.new_stream().await?;
+                let mut start = true;
+                loop {
+                    let mut buf = vec![0; DEFAULT_FRAME_SIZE];
+                    let read = stream.read(&mut buf).await?;
+                    if read == 0 && start {
+                        Err(anyhow::anyhow!("file is empty"))?;
+                    } else if read == 0 {
+                        break;
+                    }
+
+                    let frame = bytes::Bytes::from(buf).slice(0..read);
+                    let frame_with_meta = FrameWithMeta {
+                        duration: frame.len() as f64 / self.byte_per_millisecond,
+                        frame,
+                        title: self.title.clone(),
+                        artist: self.artist.clone(),
+                        content_type: self.content_type.clone(),
+
+                    };
+                    start = false;
+                    yield Ok(frame_with_meta);
+                }
+                if !self.repeat {
+                    self.played = true;
+                    break;
+                }
+            }
+        };
+
+        Ok(Box::pin(s))
     }
 }

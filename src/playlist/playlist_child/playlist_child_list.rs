@@ -1,15 +1,13 @@
-use std::{marker::PhantomData, pin::Pin, sync::Arc};
-
+use async_stream::stream;
 use async_trait::async_trait;
 use derive_lazy_playlist_child::LazyPlaylistChild;
-use rand::seq::SliceRandom;
+use futures::{StreamExt, pin_mut};
+use std::sync::Arc;
 
-use log::{debug, error};
-
-use super::PlaylistChild;
-
-type InitFn<O, F> =
-    fn(O, F) -> Pin<Box<dyn Future<Output = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>;
+use super::{
+    FrameWithMeta, PlaylistChild,
+    infinite_shuffle_stream::{InfiniteShuffleStream, OriginalData2Stream},
+};
 
 /// PlaylistChildList is a struct that contains a list of
 /// playlist children, the current index, whether to repeat
@@ -17,258 +15,112 @@ type InitFn<O, F> =
 /// the playlist is played.
 #[allow(clippy::duplicated_attributes)]
 #[derive(LazyPlaylistChild)]
-#[custom_input_type(input_type(name = "tracks", input_type = "Vec<O>"))]
+#[custom_input_type(input_type(name = "tracks", input_type = "Arc<O>"))]
+#[custom_input_type(additional_input(name = "repeat", input_type = "bool", default = "false"))]
+#[custom_input_type(additional_input(name = "shuffle", input_type = "bool", default = "false"))]
 #[custom_input_type(additional_input(
-    name = "f",
-    input_type = "Option<F>",
-    default = "None",
+    name = "original_data2_stream",
+    input_type = "OriginalData2Stream<O, Box<dyn PlaylistChild>,FP>",
+    default = "original_data2_stream_default",
     optional = true
 ))]
 #[custom_input_type(additional_input(
-    name = "init",
-    input_type = "Option<InitFn<O,F>>",
-    default = "None",
+    name = "file_provider",
+    input_type = "FP",
+    default = "FP::default()",
     optional = true
 ))]
-struct PlaylistChildListInner<O, F>
+struct PlaylistChildListInner<O, FP>
 where
-    O: Send + Sync,
-    F: Send + Sync + Clone,
+    O: Send + Sync + Unpin,
+    FP: Send + Sync + Unpin + Clone,
 {
-    /// list of local file tracks
-    tracks: Vec<Box<dyn PlaylistChild>>,
-    /// current track index
-    current_index: usize,
-    /// whether repeat the playlist
-    repeat: bool,
-    /// whether shuffle the playlist before playing
-    shuffle: bool,
+    tracks: InfiniteShuffleStream<O, Box<dyn PlaylistChild>, FP>,
     /// whether the playlist is played
     played: bool,
-    /// PhantomData to hold the type of the playlist child
-    p: PhantomData<(O, F)>,
 }
 
-impl<O, F> PlaylistChildListInner<O, F>
+impl<O, FP> PlaylistChildListInner<O, FP>
 where
-    O: Send + Sync,
-    F: Send + Sync + Clone,
+    O: Send + Sync + Unpin,
+    FP: Send + Sync + Unpin + Clone,
 {
     async fn new(
-        tracks: Vec<O>,
+        tracks: Arc<O>,
         repeat: bool,
         shuffle: bool,
-        f: Option<F>,
-        init: Option<InitFn<O, F>>,
+        original_data2_stream: OriginalData2Stream<O, Box<dyn PlaylistChild>, FP>,
+        file_provider: FP,
     ) -> anyhow::Result<Self> {
-        let init = match init {
-            Some(init) => init,
-            None => {
-                return Err(anyhow::anyhow!(
-                    "init function is required for PlaylistChildListInner"
-                ));
-            }
-        };
-        let f = match f {
-            Some(f) => f,
-            None => {
-                return Err(anyhow::anyhow!("f is required for PlaylistChildListInner"));
-            }
-        };
-        let mut tracks = tracks;
-        let mut new_tracks: Vec<Box<dyn PlaylistChild>> = Vec::with_capacity(tracks.len());
-        while let Some(track) = tracks.pop() {
-            let track = match (init)(track, f.clone()).await {
-                Ok(track) => track,
-                Err(e) => {
-                    log::error!("failed to create playlist child: {}", e);
-                    continue;
-                }
-            };
-            new_tracks.push(track);
-        }
-        if shuffle {
-            new_tracks.shuffle(&mut rand::rng());
-        } else {
-            new_tracks.reverse();
-        }
-        Ok(Self {
-            tracks: new_tracks,
-            current_index: 0,
+        let tracks = InfiniteShuffleStream::new(
+            file_provider,
+            tracks,
             repeat,
             shuffle,
+            original_data2_stream,
+        );
+
+        Ok(Self {
+            tracks,
             played: false,
-            p: PhantomData,
         })
-    }
-
-    async fn remove_track(&mut self, index: usize) -> anyhow::Result<()> {
-        if index >= self.tracks.len() {
-            return Err(anyhow::anyhow!("index out of range"));
-        }
-        self.tracks.remove(index);
-        self.check_current_index_out_range().await?;
-
-        Ok(())
-    }
-
-    async fn check_current_index_out_range(&mut self) -> anyhow::Result<()> {
-        if self.current_index >= self.tracks.len() {
-            self.played = true;
-            self.current_index = 0;
-
-            if self.shuffle {
-                self.tracks.shuffle(&mut rand::rng());
-            }
-            for track in &mut self.tracks {
-                track.reset().await?;
-            }
-        }
-
-        Ok(())
     }
 }
 
 #[async_trait]
-impl<O, F> PlaylistChild for PlaylistChildListInner<O, F>
+impl<O, FP> PlaylistChild for PlaylistChildListInner<O, FP>
 where
-    O: Send + Sync,
-    F: Send + Sync + Clone,
+    O: Send + Sync + Unpin,
+    FP: Send + Sync + Unpin + Clone,
 {
-    /// current_title returns the title of current playing song
-    async fn current_title(&mut self) -> anyhow::Result<Option<Arc<String>>> {
-        loop {
-            if self.tracks.is_empty() {
-                return Ok(None);
-            }
-            if self.played && !self.repeat {
-                return Ok(None);
-            }
-            let t = self.tracks[self.current_index].current_title().await;
-            if t.is_ok() {
-                return t;
-            }
-            error!("failed to get current title of track: {}", t.err().unwrap());
-            self.remove_track(self.current_index).await?;
-        }
-    }
-
-    /// Artist returns the artist which is currently playing.
-    async fn current_artist(&mut self) -> anyhow::Result<Option<Arc<String>>> {
-        loop {
-            if self.tracks.is_empty() {
-                return Ok(None);
-            }
-            if self.played && !self.repeat {
-                return Ok(None);
-            }
-            let t = self.tracks[self.current_index].current_artist().await;
-            if t.is_ok() {
-                return t;
-            }
-            error!(
-                "failed to get current artist of track: {}",
-                t.err().unwrap()
-            );
-            self.remove_track(self.current_index).await?;
-        }
-    }
-
-    /// return the current content type of the playlist
-    async fn content_type(&mut self) -> anyhow::Result<Option<Arc<String>>> {
-        loop {
-            if self.tracks.is_empty() {
-                return Ok(None);
-            }
-            if self.played && !self.repeat {
-                return Ok(None);
-            }
-            let t = self.tracks[self.current_index].content_type().await;
-            if t.is_ok() {
-                return t;
-            }
-            error!("failed to get content type of track: {}", t.err().unwrap());
-            self.remove_track(self.current_index).await?;
-        }
-    }
-
-    /// return the current byte_per_millisecond
-    async fn byte_per_millisecond(&mut self) -> anyhow::Result<Option<f64>> {
-        loop {
-            if self.tracks.is_empty() {
-                return Ok(None);
-            }
-            if self.played && !self.repeat {
-                return Ok(None);
-            }
-            let t = self.tracks[self.current_index].byte_per_millisecond().await;
-            if t.is_ok() {
-                return t;
-            }
-            error!(
-                "failed to get byte per millisecond of track: {}",
-                t.err().unwrap()
-            );
-            self.remove_track(self.current_index).await?;
-        }
-    }
-
-    /// return a stream representing the current track, and the byte_per_millisecond
-    async fn next_frame(&mut self) -> anyhow::Result<Option<bytes::Bytes>> {
-        let mut start_of_track = false;
-        loop {
-            self.check_current_index_out_range().await?;
-
-            if self.played && !self.repeat {
-                return Ok(None);
-            }
-            if self.tracks.is_empty() {
-                return Ok(None);
-            }
-
-            let frame = match self.tracks[self.current_index].next_frame().await {
-                Ok(frame) => frame,
-                Err(e) => {
-                    error!("failed to get next frame: {}", e);
-                    self.remove_track(self.current_index).await?;
-                    continue;
-                }
-            };
-
-            if let Some(frame) = frame {
-                return Ok(Some(frame));
-            }
-
-            debug!("end of track");
-            // read to the end of current stream move to the next track
-            self.current_index += 1;
-            // if the current index is the start of the track, and the frame is none
-            // then the track may have error, remove it
-            if start_of_track {
-                self.remove_track(self.current_index - 1).await?;
-            } else {
-                start_of_track = true;
-            }
-        }
-    }
-
     /// check if the Playlist is finished
     async fn is_finished(&mut self) -> anyhow::Result<bool> {
-        Ok((self.played && !self.repeat) || self.tracks.is_empty())
+        Ok(self.played)
     }
 
-    /// reset the played status of the child
-    async fn reset(&mut self) -> anyhow::Result<()> {
-        self.current_index = 0;
-        self.played = false;
+    async fn stream_frame_with_meta(
+        &'_ mut self,
+    ) -> anyhow::Result<
+        std::pin::Pin<Box<dyn futures::Stream<Item = anyhow::Result<FrameWithMeta>> + Send + '_>>,
+    > {
+        let s = stream! {
+            let s = self.tracks.stream();
+            let s = s.fuse();
+            pin_mut!(s);
 
-        for track in &mut self.tracks {
-            track.reset().await?;
-        }
-        if self.shuffle {
-            self.tracks.shuffle(&mut rand::rng());
-        }
+            loop {
+                let data = s.next().await;
+                if data.is_none() {
+                    self.played = true;
+                    break;
+                }
+                let data = data.unwrap();
+                if let Err(e) = data {
+                    yield Err(e);
+                    continue;
+                }
+                let mut data = data.unwrap();
+                let data_s = match data.stream_frame_with_meta().await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        yield Err(e);
+                        continue;
+                    }
+                };
+                let mut data_s = data_s.fuse();
 
-        Ok(())
+                loop {
+                    let frame = data_s.next().await;
+                    match frame {
+                        None => break,
+                        Some(f) => {
+                            yield f;
+                        }
+                    }
+                }
+            }
+        };
+
+        Ok(Box::pin(s))
     }
 }

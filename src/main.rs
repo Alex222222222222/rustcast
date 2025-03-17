@@ -1,5 +1,3 @@
-// TODO cache x-playback-session-id
-
 use std::{collections::HashMap, sync::Arc};
 
 use clap::Parser;

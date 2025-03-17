@@ -37,7 +37,7 @@ mod tests {
         // Verify the enum variant
         match config.child {
             PlaylistChildConfig::LocalFolder { folder, .. } => {
-                assert_eq!(folder, "/path/to/folder");
+                assert_eq!(*folder, "/path/to/folder");
             }
             _ => panic!("Expected LocalFolder variant"),
         }

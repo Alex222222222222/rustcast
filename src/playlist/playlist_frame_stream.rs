@@ -84,8 +84,8 @@ impl Stream for PlaylistFrameStream {
                     match data {
                         Ok(Some(frame)) => {
                             self.current_stream_frame = frame.clone();
-                            self.write_ahead_duration += frame.duration;
-                            let sleep_dur = frame.duration.floor();
+                            self.write_ahead_duration += frame.frame_with_meta.duration;
+                            let sleep_dur = frame.frame_with_meta.duration.floor();
                             self.waiting_pending_future = Some(Box::pin(tokio::time::sleep(
                                 std::time::Duration::from_millis(sleep_dur as u64),
                             )));

@@ -1,52 +1,54 @@
-#[derive(Debug, serde::Deserialize)]
+use std::sync::Arc;
+
+#[derive(Debug, serde::Deserialize, Clone)]
 pub enum PlaylistChildConfig {
     Silent,
     LocalFolder {
-        folder: String,
+        folder: Arc<String>,
         #[serde(default)]
         repeat: Option<bool>,
         #[serde(default)]
         shuffle: Option<bool>,
         #[serde(default)]
-        fail_over: Option<Box<PlaylistChildConfig>>,
+        fail_over: Option<Arc<PlaylistChildConfig>>,
     },
     LocalFiles {
-        files: Vec<String>,
+        files: Arc<Vec<Arc<String>>>,
         #[serde(default)]
         repeat: Option<bool>,
         #[serde(default)]
         shuffle: Option<bool>,
         #[serde(default)]
-        fail_over: Option<Box<PlaylistChildConfig>>,
+        fail_over: Option<Arc<PlaylistChildConfig>>,
     },
     RemoteFolder {
-        folder: String,
-        remote_client: String,
+        folder: Arc<String>,
+        remote_client: Arc<String>,
         #[serde(default)]
         repeat: Option<bool>,
         #[serde(default)]
         shuffle: Option<bool>,
         #[serde(default)]
-        fail_over: Option<Box<PlaylistChildConfig>>,
+        fail_over: Option<Arc<PlaylistChildConfig>>,
     },
     RemoteFiles {
-        files: Vec<String>,
+        files: Arc<Vec<Arc<String>>>,
         remote_client: String,
         #[serde(default)]
         repeat: Option<bool>,
         #[serde(default)]
         shuffle: Option<bool>,
         #[serde(default)]
-        fail_over: Option<Box<PlaylistChildConfig>>,
+        fail_over: Option<Arc<PlaylistChildConfig>>,
     },
     Playlists {
-        children: Box<Vec<PlaylistChildConfig>>,
+        children: Arc<Vec<Arc<PlaylistChildConfig>>>,
         #[serde(default)]
         repeat: Option<bool>,
         #[serde(default)]
         shuffle: Option<bool>,
         #[serde(default)]
-        fail_over: Option<Box<PlaylistChildConfig>>,
+        fail_over: Option<Arc<PlaylistChildConfig>>,
     },
 }
 #[cfg(test)]
@@ -72,7 +74,7 @@ mod tests {
         let config = PlaylistChildConfig::from_json(json).await.unwrap();
         match config {
             PlaylistChildConfig::LocalFolder { folder, .. } => {
-                assert_eq!(folder, "/path/to/folder")
+                assert_eq!(*folder, "/path/to/folder")
             }
             _ => panic!("Expected LocalFolder variant"),
         }
@@ -85,8 +87,8 @@ mod tests {
         match config {
             PlaylistChildConfig::LocalFiles { files, .. } => {
                 assert_eq!(files.len(), 2);
-                assert_eq!(files[0], "/path/to/file1.mp3");
-                assert_eq!(files[1], "/path/to/file2.mp3");
+                assert_eq!(*files[0], "/path/to/file1.mp3");
+                assert_eq!(*files[1], "/path/to/file2.mp3");
             }
             _ => panic!("Expected LocalFiles variant"),
         }
@@ -102,8 +104,8 @@ mod tests {
                 remote_client,
                 ..
             } => {
-                assert_eq!(folder, "bucket/folder");
-                assert_eq!(remote_client, "default");
+                assert_eq!(*folder, "bucket/folder");
+                assert_eq!(*remote_client, "default");
             }
             _ => panic!("Expected S3Folder variant"),
         }
@@ -120,8 +122,8 @@ mod tests {
                 ..
             } => {
                 assert_eq!(files.len(), 2);
-                assert_eq!(files[0], "bucket/file1.mp3");
-                assert_eq!(files[1], "bucket/file2.mp3");
+                assert_eq!(*files[0], "bucket/file1.mp3");
+                assert_eq!(*files[1], "bucket/file2.mp3");
                 assert_eq!(remote_client, "default");
             }
             _ => panic!("Expected S3Files variant"),
@@ -140,7 +142,7 @@ mod tests {
         let config = PlaylistChildConfig::from_json(json).await.unwrap();
         match config {
             PlaylistChildConfig::LocalFolder { folder, repeat, .. } => {
-                assert_eq!(folder, "/path/to/folder");
+                assert_eq!(*folder, "/path/to/folder");
                 assert_eq!(repeat, Some(true));
             }
             _ => panic!("Expected LocalFolder variant"),
