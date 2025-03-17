@@ -85,8 +85,9 @@ impl Stream for PlaylistFrameStream {
                         Ok(Some(frame)) => {
                             self.current_stream_frame = frame.clone();
                             self.write_ahead_duration += frame.duration;
+                            let sleep_dur = frame.duration.floor();
                             self.waiting_pending_future = Some(Box::pin(tokio::time::sleep(
-                                std::time::Duration::from_millis(frame.duration.floor() as u64),
+                                std::time::Duration::from_millis(sleep_dur as u64),
                             )));
                             return Poll::Ready(Some(Ok(frame)));
                         }
