@@ -1,6 +1,7 @@
 use std::{collections::HashMap, pin::Pin, sync::Arc};
 
-use tokio::sync::Mutex;
+use async_stream::stream;
+use futures::Stream;
 
 use crate::{
     FileProvider, LocalFileProvider,
@@ -17,7 +18,7 @@ pub async fn build_playlist_from_config(
     for (key, playlist) in playlist {
         let PlaylistConfig { child, name } = playlist;
         let child = build_playlist_child_from_config(child, file_provider.clone()).await?;
-        let playlist = Playlist::new(name, Arc::new(Mutex::new(child))).await;
+        let playlist = Playlist::new(name, child).await;
         res.insert(key, Arc::new(playlist));
     }
 
@@ -39,7 +40,7 @@ async fn build_playlist_child_from_config(
          } => {
              let file_provider = Arc::new(LocalFileProvider::new());
              Box::new(
-                 crate::playlist::LocalFolder::new(folder, repeat, shuffle, file_provider).await?,
+                 crate::playlist::LocalFolder::new(folder, repeat, shuffle, file_provider)?,
              )
          }
          PlaylistChildConfig::Silent => todo!("Implement this match arm"),
@@ -48,18 +49,18 @@ async fn build_playlist_child_from_config(
          } => {
              let file_provider: Arc<dyn FileProvider> = Arc::new(LocalFileProvider::new());
              Box::new(
-                 crate::playlist::LocalFileTrackList::new(files, repeat, shuffle, file_provider).await?,
+                 crate::playlist::LocalFileTrackList::new(files, repeat, shuffle, file_provider)?,
              )
          },
          PlaylistChildConfig::RemoteFolder { folder, remote_client, repeat, shuffle, ..
              // TODO add fail_over functionality
          } => {
-             let file_provider = match file_provider.get(&remote_client){
+             let file_provider = match file_provider.get(remote_client.as_str()){
                  Some(provider) => provider.clone(),
                  None => return Err(anyhow::anyhow!("No file provider found for {}", remote_client)),
              };
              Box::new(
-                 crate::playlist::LocalFolder::new(folder, repeat, shuffle, file_provider).await?,
+                 crate::playlist::LocalFolder::new(folder, repeat, shuffle, file_provider)?,
              )
          },
          PlaylistChildConfig::RemoteFiles { files, remote_client, repeat, shuffle, ..
@@ -70,30 +71,41 @@ async fn build_playlist_child_from_config(
                  None => return Err(anyhow::anyhow!("No file provider found for {}", remote_client)),
              };
              Box::new(
-                 crate::playlist::LocalFileTrackList::new(files, repeat, shuffle, file_provider).await?,
+                 crate::playlist::LocalFileTrackList::new(files, repeat, shuffle, file_provider)?,
              )
          },
 
          PlaylistChildConfig::Playlists { children, repeat, shuffle, ..
         // TODO add fail_over functionality
          } => {
-             let children = *children;
-             type PlaylistChildOutPin = Pin<
-                 Box<
-                     dyn futures::Future<Output = anyhow::Result<Box<dyn PlaylistChild>>>
-                         + std::marker::Send,
-                 >,
-             >;
+             type ReturnStream = Pin<Box<dyn Stream<Item = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>;
 
-             fn init_fn(c: PlaylistChildConfig, f: Arc<HashMap<String, Arc<dyn FileProvider >>>) -> PlaylistChildOutPin {
-                 Box::pin(async move {
-                     build_playlist_child_from_config(c, f).await
-                 })
+             fn init_fn(
+                 p: Arc<Vec<Arc<PlaylistChildConfig>>>,
+                 fp: Arc<HashMap<String, Arc<dyn FileProvider >>>,
+             ) -> Pin<
+                 Box<
+                     dyn Future<Output = anyhow::Result<ReturnStream>>
+                         + Send,
+                 >,
+             > {
+                 let s = stream! {
+                        for i in p.iter() {
+                            let c = build_playlist_child_from_config((**i).clone(), fp.clone()).await;
+                            yield c;
+                        }
+                 };
+
+                     let s: ReturnStream = Box::pin(s);
+
+                         Box::pin(async { Ok(s) })
              }
 
-             // async fn init(c: PlaylistChildConfig) -> anyhow::Result<Box<dyn PlaylistChild>> {}
              Box::new(
-                 crate::playlist::PlaylistChildList::new(children, repeat, shuffle, Some(file_provider),Some(init_fn)).await?,
+                 crate::playlist::PlaylistChildList::<Vec<Arc<PlaylistChildConfig>>, Arc<HashMap<String, Arc<dyn FileProvider >>>>::
+                     new(children,
+                     repeat,
+                     shuffle, init_fn, file_provider,)?,
              )
          },
 

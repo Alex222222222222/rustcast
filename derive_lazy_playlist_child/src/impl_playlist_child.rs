@@ -8,55 +8,14 @@ pub fn impl_playlist_child(name: &Ident, generics: &Generics) -> proc_macro2::To
     quote! {
         #[async_trait::async_trait]
         impl #impl_generics PlaylistChild for #name #ty_generics #where_clause{
-            /// current_title returns the title of current playing song
-            async fn current_title(&mut self) -> anyhow::Result<Option<std::sync::Arc<String>>> {
+            async fn stream_frame_with_meta(
+                &'_ mut self,
+            ) -> anyhow::Result<
+                std::pin::Pin<Box<dyn futures::Stream<Item = anyhow::Result<FrameWithMeta>> + Send + '_>>,
+            > {
                 self.init().await?;
                 if let Some(inner) = &mut self.inner {
-                    inner.current_title().await
-                } else {
-                    anyhow::bail!("inner is none")
-                }
-            }
-
-            /// Artist returns the artist which is currently playing.
-            async fn current_artist(&mut self) -> anyhow::Result<Option<std::sync::Arc<String>>> {
-                self.init().await?;
-                if let Some(inner) = &mut self.inner {
-                    inner.current_artist().await
-                } else {
-                    anyhow::bail!("inner is none")
-                }
-            }
-
-            /// return the current content type of the playlist
-            async fn content_type(&mut self) -> anyhow::Result<Option<std::sync::Arc<String>>> {
-                self.init().await?;
-                if let Some(inner) = &mut self.inner {
-                    inner.content_type().await
-                } else {
-                    anyhow::bail!("inner is none")
-                }
-            }
-
-            /// return the current byte_per_millisecond
-            async fn byte_per_millisecond(&mut self) -> anyhow::Result<Option<f64>> {
-                self.init().await?;
-                if let Some(inner) = &mut self.inner {
-                    inner.byte_per_millisecond().await
-                } else {
-                    anyhow::bail!("inner is none")
-                }
-            }
-
-            /// return a stream representing the current track, and the byte_per_millisecond
-            /// the stream should be closed when the track is finished
-            /// return none if the playlist is finished
-            async fn next_frame(
-                &mut self,
-            ) -> anyhow::Result<Option<bytes::Bytes>> {
-                self.init().await?;
-                if let Some(inner) = &mut self.inner {
-                    inner.next_frame().await
+                    inner.stream_frame_with_meta().await
                 } else {
                     anyhow::bail!("inner is none")
                 }
@@ -67,16 +26,6 @@ pub fn impl_playlist_child(name: &Ident, generics: &Generics) -> proc_macro2::To
                 self.init().await?;
                 if let Some(inner) = &mut self.inner {
                     inner.is_finished().await
-                } else {
-                    anyhow::bail!("inner is none")
-                }
-            }
-
-            /// reset the played status of the child
-            async fn reset(&mut self) -> anyhow::Result<()> {
-                self.init().await?;
-                if let Some(inner) = &mut self.inner {
-                    inner.reset().await
                 } else {
                     anyhow::bail!("inner is none")
                 }

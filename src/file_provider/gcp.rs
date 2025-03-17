@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf, pin::Pin, sync::Arc, task::Poll};
 
 use async_trait::async_trait;
 use cache::GcpDownloader;
-use futures::{FutureExt, Stream, StreamExt};
+use futures::{Stream, StreamExt};
 use log::debug;
 use object_store::ObjectStore;
 use tokio::sync::Mutex;
@@ -56,8 +56,8 @@ impl FileProvider for GoogleCouldStorageFileProvider {
 
     async fn list_files(
         &self,
-        path: Option<String>,
-    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>> + Unpin + Send>> {
+        path: Option<&str>,
+    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>> + Unpin + Send + Sync>> {
         debug!("list files in {:?}", path);
         let s =
             ObjectStoreListStream2FileProviderStream::new(self.object_store.clone(), path).await?;
@@ -65,8 +65,9 @@ impl FileProvider for GoogleCouldStorageFileProvider {
     }
 }
 
-type StringOutPending =
-    Pin<Box<dyn futures::Future<Output = Option<anyhow::Result<String>>> + std::marker::Send>>;
+type StringOutPending = Pin<
+    Box<dyn futures::Future<Output = Option<anyhow::Result<String>>> + std::marker::Send + Sync>,
+>;
 
 struct ObjectStoreListStream2FileProviderStream {
     res: usize,
@@ -74,9 +75,9 @@ struct ObjectStoreListStream2FileProviderStream {
 }
 
 impl ObjectStoreListStream2FileProviderStream {
-    async fn new(s: Arc<dyn ObjectStore>, p: Option<String>) -> anyhow::Result<Self> {
+    async fn new(s: Arc<dyn ObjectStore>, p: Option<&str>) -> anyhow::Result<Self> {
         let p = match p {
-            Some(p) => Some(object_store::path::Path::parse(&p)?),
+            Some(p) => Some(object_store::path::Path::parse(p)?),
             None => None,
         };
         let (sender, res) = tokio::sync::mpsc::channel(1);
@@ -158,7 +159,7 @@ impl Stream for ObjectStoreListStream2FileProviderStream {
         }
 
         let r = get_res(self.res);
-        self.pending = Some(r.boxed());
+        self.pending = Some(Box::pin(r) as StringOutPending);
         cx.waker().wake_by_ref();
         Poll::Pending
     }

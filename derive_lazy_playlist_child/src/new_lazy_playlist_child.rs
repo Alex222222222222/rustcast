@@ -21,7 +21,7 @@ pub fn new_lazy_playlist_child(
     quote! {
         // The generated impl.
         impl #impl_generics #name #ty_generics #where_clause {
-            pub async fn new(#input) -> anyhow::Result<Self> {
+            pub fn new(#input) -> anyhow::Result<Self> {
                 Ok(#constructor)
             }
         }

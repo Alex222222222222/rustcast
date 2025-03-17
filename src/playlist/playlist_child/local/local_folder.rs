@@ -1,17 +1,18 @@
-use std::sync::Arc;
+use std::{pin::Pin, sync::Arc};
 
-use crate::{FileProvider, playlist::PlaylistChild};
+use super::super::FrameWithMeta;
+use crate::{
+    FileProvider,
+    playlist::{LocalFileTrack, PlaylistChild, PlaylistChildList},
+};
 use async_trait::async_trait;
-use bytes::Bytes;
 use derive_lazy_playlist_child::LazyPlaylistChild;
-use log::{debug, error};
+use futures::Stream;
 use tokio_stream::StreamExt;
-
-use super::LocalFileTrackList;
 
 #[allow(clippy::duplicated_attributes)]
 #[derive(LazyPlaylistChild)]
-#[custom_input_type(input_type(name = "tracks", input_type = "String"))]
+#[custom_input_type(input_type(name = "tracks", input_type = "Arc<String>"))]
 #[custom_input_type(additional_input(name = "repeat", input_type = "bool", default = "false"))]
 #[custom_input_type(additional_input(name = "shuffle", input_type = "bool", default = "false"))]
 #[custom_input_type(additional_input(
@@ -22,34 +23,51 @@ use super::LocalFileTrackList;
 ))]
 struct LocalFolderInner {
     /// list of local file tracks
-    tracks: LocalFileTrackList,
+    tracks: PlaylistChildList<String, Arc<dyn FileProvider>>,
+}
+
+async fn folder_to_stream(
+    p: Arc<String>,
+    file_provider: Arc<dyn FileProvider>,
+) -> anyhow::Result<Pin<Box<dyn Stream<Item = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>> {
+    let s = file_provider.list_files(Some(p.as_ref())).await?;
+
+    let s = s.map(move |i| -> anyhow::Result<Box<dyn PlaylistChild>> {
+        let i = i?;
+        Ok(Box::new(LocalFileTrack::new(
+            Arc::new(i),
+            file_provider.clone(),
+            Some(false),
+        )?) as Box<dyn PlaylistChild>)
+    });
+
+    Ok(Box::pin(s))
+}
+
+type ReturnStream = Pin<Box<dyn Stream<Item = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>;
+
+fn original_data2_stream_default(
+    p: Arc<String>,
+    fp: Arc<dyn FileProvider>,
+) -> Pin<Box<dyn Future<Output = anyhow::Result<ReturnStream>> + Send>> {
+    Box::pin(folder_to_stream(p, fp))
 }
 
 impl LocalFolderInner {
     async fn new(
-        tracks: String,
+        tracks: Arc<String>,
         repeat: bool,
         shuffle: bool,
         file_provider: Arc<dyn FileProvider>,
     ) -> anyhow::Result<Self> {
-        // read the folder and get all the tracks
-        let mut new_tracks = Vec::new();
-        let mut dir = file_provider.list_files(Some(tracks)).await?;
-        while let Some(entry) = dir.next().await {
-            match entry {
-                Ok(path) => {
-                    new_tracks.push(path);
-                }
-                Err(e) => {
-                    error!("error reading directory: {:?}", e);
-                }
-            }
-        }
-        debug!("Get files: {}", new_tracks.len());
-
         Ok(Self {
-            tracks: LocalFileTrackList::new(new_tracks, Some(repeat), Some(shuffle), file_provider)
-                .await?,
+            tracks: PlaylistChildList::new(
+                tracks,
+                Some(repeat),
+                Some(shuffle),
+                original_data2_stream_default,
+                file_provider,
+            )?,
         })
     }
 }
