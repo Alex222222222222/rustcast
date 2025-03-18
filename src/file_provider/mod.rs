@@ -45,8 +45,10 @@ pub trait FileProvider: Send + Sync {
 
     /// List files in a directory.
     /// Returns iterator of file paths.
-    async fn list_files(
-        &self,
-        path: Option<&str>,
-    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>> + Unpin + Send + Sync>>;
+    async fn list_files<'s, 'p>(
+        &'s self,
+        path: Option<&'p str>,
+    ) -> anyhow::Result<std::pin::Pin<Box<dyn Stream<Item = anyhow::Result<String>> + Send + 'p>>>
+    where
+        's: 'p;
 }

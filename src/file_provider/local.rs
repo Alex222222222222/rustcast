@@ -1,9 +1,8 @@
-use std::{path::PathBuf, pin::Pin, sync::Arc, task::Poll};
-
+use async_stream::stream;
 use async_trait::async_trait;
 use futures::Stream;
-use tokio::sync::Mutex;
-use tokio_stream::StreamExt;
+use std::{collections::VecDeque, path::PathBuf};
+use tokio_stream::{StreamExt, wrappers::ReadDirStream};
 
 use super::FileProvider;
 
@@ -51,111 +50,60 @@ impl FileProvider for LocalFileProvider {
         }
     }
 
-    async fn list_files(
-        &self,
-        path: Option<&str>,
-    ) -> anyhow::Result<Box<dyn Stream<Item = anyhow::Result<String>> + Unpin + Send + Sync>> {
+    async fn list_files<'s, 'p>(
+        &'s self,
+        path: Option<&'p str>,
+    ) -> anyhow::Result<std::pin::Pin<Box<dyn Stream<Item = anyhow::Result<String>> + Send + 'p>>>
+    where
+        's: 'p,
+    {
         let p = match path {
             Some(p) => PathBuf::from(p),
             None => PathBuf::from("."),
         };
-        let entries = tokio::fs::read_dir(p).await?;
-        let stream = tokio_stream::wrappers::ReadDirStream::new(entries);
-        let stream = Box::new(MyReadDirStream {
-            entries: Arc::new(Mutex::new(Some(Box::new(stream)))),
-            pending: None,
-        });
-
-        Ok(stream)
-    }
-}
-
-type Entries = Arc<
-    Mutex<
-        Option<
-            Box<dyn Stream<Item = tokio::io::Result<tokio::fs::DirEntry>> + Unpin + Send + Sync>,
-        >,
-    >,
->;
-type StringOutPending =
-    Pin<Box<dyn futures::Future<Output = Option<anyhow::Result<String>>> + Send + Sync>>;
-
-struct MyReadDirStream {
-    entries: Entries,
-
-    pending: Option<StringOutPending>,
-}
-
-async fn next(s: Entries) -> Option<anyhow::Result<String>> {
-    loop {
-        // take the data so we can replace it with the new stream
-        let mut s_lock = s.lock().await;
-        let mut s_d = match s_lock.take() {
-            Some(s_d) => s_d,
-            None => return None,
-        };
-        drop(s_lock);
-
-        let e = match s_d.next().await {
-            Some(Ok(e)) => e,
-            Some(Err(e)) => {
-                let mut s_lock = s.lock().await;
-                s_lock.replace(Box::new(s_d));
-                return Some(Err(e.into()));
-            }
-            None => return None,
-        };
-
-        let t = match e.file_type().await {
-            Ok(t) => t,
-            Err(e) => {
-                let mut s_lock = s.lock().await;
-                s_lock.replace(Box::new(s_d));
-                return Some(Err(e.into()));
-            }
-        };
-        if t.is_file() {
-            let mut s_lock = s.lock().await;
-            s_lock.replace(Box::new(s_d));
-            return Some(Ok(e.path().to_string_lossy().to_string()));
-        }
-
-        let entries = match tokio::fs::read_dir(e.path()).await {
-            Ok(e) => e,
-            Err(_) => {
-                let mut s_lock = s.lock().await;
-                s_lock.replace(Box::new(s_d));
-                continue;
-            }
-        };
-        let stream = tokio_stream::wrappers::ReadDirStream::new(entries);
-
-        let s_d = s_d.merge(stream);
-        // replace the stream
-        let mut s_lock = s.lock().await;
-        s_lock.replace(Box::new(s_d));
-    }
-}
-
-impl Stream for MyReadDirStream {
-    type Item = anyhow::Result<String>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<Option<Self::Item>> {
-        let this = self.get_mut();
-        if let Some(ref mut p) = this.pending {
-            match p.as_mut().poll(cx) {
-                Poll::Ready(e) => {
-                    this.pending = None;
-                    return Poll::Ready(e);
+        let e = tokio::fs::read_dir(p).await?;
+        let mut e: std::pin::Pin<
+            Box<dyn Stream<Item = Result<tokio::fs::DirEntry, tokio::io::Error>> + Send>,
+        > = Box::pin(ReadDirStream::new(e));
+        let mut dirs = VecDeque::new();
+        let s = stream! {
+            loop {
+                let d = dirs.pop_front();
+                if let Some(d) = d {
+                    let new_e = match tokio::fs::read_dir(d).await {
+                        Ok(e) => e,
+                        Err(e) => {
+                            yield Err(e.into());
+                            continue;
+                        },
+                    };
+                    let new_e = ReadDirStream::new(new_e);
+                    e = Box::pin(e.merge(new_e));
                 }
-                Poll::Pending => return Poll::Pending,
-            }
-        }
 
-        let s = this.entries.clone();
-        let p = next(s);
-        this.pending = Some(Box::pin(p));
-        cx.waker().wake_by_ref();
-        Poll::Pending
+                let f = e.next().await;
+                match f {
+                    Some(Ok(f)) => {
+                        let f = f;
+                        let t = f.file_type().await?;
+                        if t.is_dir() {
+                            dirs.push_back(f.path());
+                        } else {
+                            yield Ok(f.path().to_string_lossy().to_string());
+                        }
+                    },
+                    Some(Err(e)) => {
+                        yield Err(e.into());
+                    },
+                    None => {
+                        if dirs.is_empty() {
+                            break;
+                        }
+                    },
+                }
+            }
+        };
+
+        Ok(Box::pin(s))
     }
 }
