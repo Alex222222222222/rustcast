@@ -13,8 +13,8 @@ impl super::FileDownloader for LocalDownloader {
     /// Returns a stream of bytes if the file exists, otherwise None.
     async fn get_file(
         &self,
-        _: &str,
-    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin + Send>, Error>
+        _path: &str,
+    ) -> Result<std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Send>>, Error>
     {
         // This function should never be called for the local downloader.
         Err(Error::NotImplemented)

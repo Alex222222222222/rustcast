@@ -33,7 +33,7 @@ pub trait FileDownloader: Send + Sync {
     async fn get_file(
         &self,
         path: &str,
-    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin + Send>, Error>;
+    ) -> Result<std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Send>>, Error>;
 
     /// Get metadata for a file from the file provider.
     /// Returns ResourceNotFound error if the file does not exist.

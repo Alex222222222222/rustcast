@@ -1,5 +1,6 @@
-use std::{pin::Pin, sync::Arc};
+use std::sync::Arc;
 
+use async_stream::stream;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
@@ -82,13 +83,19 @@ impl FileDownloader for GcpDownloader {
     async fn get_file(
         &self,
         path: &str,
-    ) -> anyhow::Result<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Unpin + Send>, Error>
+    ) -> Result<std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, Error>> + Send>>, Error>
     {
         let path = object_store::path::Path::parse(path)?;
         match self.object_store.get(&path).await {
-            Ok(file) => Ok(Box::new(ObjectStoreFileStream2FileProviderStream(
-                file.into_stream(),
-            ))),
+            Ok(file) => {
+                let s = stream! {
+                    let mut stream = file.into_stream();
+                    while let Some(bytes) = stream.next().await {
+                        yield bytes.map_err(|e| e.into());
+                    }
+                };
+                Ok(Box::pin(s))
+            }
             Err(object_store::Error::NotFound { .. }) => {
                 Err(Error::ResourceNotFound(path.to_string()))
             }
@@ -116,33 +123,5 @@ impl FileDownloader for GcpDownloader {
 
     fn hash(&self) -> Bytes {
         self.hash.clone()
-    }
-}
-
-struct ObjectStoreFileStream2FileProviderStream(
-    Pin<
-        Box<
-            (
-                dyn futures::Stream<Item = Result<bytes::Bytes, object_store::Error>>
-                    + std::marker::Send
-                    + 'static
-            ),
-        >,
-    >,
-);
-
-impl Stream for ObjectStoreFileStream2FileProviderStream {
-    type Item = Result<bytes::Bytes, Error>;
-
-    fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        match self.0.poll_next_unpin(cx) {
-            std::task::Poll::Ready(Some(Ok(bytes))) => std::task::Poll::Ready(Some(Ok(bytes))),
-            std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Some(Err(e.into()))),
-            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
     }
 }

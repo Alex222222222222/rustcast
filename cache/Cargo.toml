@@ -27,9 +27,5 @@ bytes = "*"
 tokio-stream = "*"
 futures = { version = "*", features = ["thread-pool"] }
 tokio-util = { version = "0.7", features = ["codec", "rt", "io", "net"] }
-object_store = { version = "*", features = [
-    "gcp",
-    "aws",
-    "azure",
-    "http",
-] }
+object_store = { version = "*", features = ["gcp", "aws", "azure", "http"] }
+async-stream = "*"

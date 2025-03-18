@@ -5,6 +5,7 @@ use crate::{
     FileProvider,
     playlist::{LocalFileTrack, PlaylistChild, PlaylistChildList},
 };
+use async_stream::stream;
 use async_trait::async_trait;
 use derive_lazy_playlist_child::LazyPlaylistChild;
 use futures::Stream;
@@ -30,16 +31,27 @@ async fn folder_to_stream(
     p: Arc<String>,
     file_provider: Arc<dyn FileProvider>,
 ) -> anyhow::Result<Pin<Box<dyn Stream<Item = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>> {
-    let s = file_provider.list_files(Some(p.as_ref())).await?;
-
-    let s = s.map(move |i| -> anyhow::Result<Box<dyn PlaylistChild>> {
-        let i = i?;
-        Ok(Box::new(LocalFileTrack::new(
-            Arc::new(i),
-            file_provider.clone(),
-            Some(false),
-        )?) as Box<dyn PlaylistChild>)
-    });
+    let s = stream! {
+        let file_provider1 = file_provider.clone();
+        let mut o_s = file_provider.list_files(Some(p.as_ref())).await?;
+        while let Some(i) = o_s.next().await {
+            match i {
+                Ok(i) => {
+                    let res = LocalFileTrack::new(
+                        Arc::new(i),
+                        file_provider1.clone(),
+                        Some(false),
+                    );
+                    if let Err(e) = res {
+                        yield Err(e);
+                        continue;
+                    }
+                    yield Ok(Box::new(res.unwrap()) as Box<dyn PlaylistChild>)
+                },
+                Err(e) => yield Err(e),
+            }
+        }
+    };
 
     Ok(Box::pin(s))
 }
