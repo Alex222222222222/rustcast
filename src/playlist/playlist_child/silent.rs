@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use crate::playlist::PlaylistChild;
 
-const SILENT_FILE: &'static [u8; 37206] = include_bytes!("../../../1-second-of-silence.mp3");
+const SILENT_FILE: &[u8; 37206] = include_bytes!("../../../1-second-of-silence.mp3");
 
-const SILENT_FILE_FRAME_WITH_META: once_cell::sync::Lazy<FrameWithMeta> =
+static SILENT_FILE_FRAME_WITH_META: once_cell::sync::Lazy<FrameWithMeta> =
     Lazy::new(|| FrameWithMeta {
         frame: bytes::Bytes::from_static(SILENT_FILE),
         title: Arc::new("Silent".to_string()),
