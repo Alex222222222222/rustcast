@@ -10,6 +10,37 @@ on:
   workflow_dispatch: # Allows manual triggering
 
 jobs:
+  get_target_tag:
+    name: Get target tag
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Get current version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)
+          echo "VERSION=v$VERSION" >> $GITHUB_ENV
+
+      - name: Get the newest version tag from the repository
+        id: get_version_tag
+        run: |
+          git fetch --tags
+          TAG=$(git tag | grep -E '^v?[0-9]+(\.[0-9]+)*$' | sort -V | tail -n 1)
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+      - name: Determine target tag
+        id: target_tag
+        run: |
+          if [[ "${{ env.VERSION }}" == "${{ env.TAG }}" ]]; then
+            echo "TARGET_TAG=latest" >> $GITHUB_ENV
+          else
+            echo "TARGET_TAG=${{ env.VERSION }}" >> $GITHUB_ENV
+          fi
+
   build:
     name: Build on ${{ matrix.os }}
     if: github.event.pull_request.merged
@@ -38,9 +69,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ matrix.os }}-cargo-
 
       - name: Build release
         run: cargo build --release
@@ -89,14 +120,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: alex222222222222/rcast:latest
-
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-name: index.docker.io/my-docker-hub-namespace/my-docker-hub-repository
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
+          tags: alex222222222222/rcast:${{ env.TARGET_TAG }}
 
   create_release:
     name: Create GitHub Release
@@ -123,16 +147,17 @@ jobs:
           echo "$CHANGELOG" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      - name: Delete existing 'latest' release
+      - name: Delete existing release
         uses: dev-drprasad/delete-tag-and-release@v0.2.1
         with:
           delete_release: true
-          tag_name: latest
+          tag_name: ${{ env.TARGET_TAG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true # Continue even if no previous release exists
 
       - name: Create new 'latest' release
+        if: ${{ env.TARGET_TAG == 'latest' }}
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
@@ -147,5 +172,23 @@ jobs:
             *This is an automated prerelease build from a merged PR to the master branch.*
           files: artifacts/**
           prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create new release
+        if: ${{ env.TARGET_TAG != 'latest' }}
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TARGET_TAG }}
+          name: ${{ env.TARGET_TAG }} Release
+          body: |
+            Release ${{ env.TARGET_TAG }}
+
+            ## Recent changes:
+            ${{ env.CHANGELOG }}
+
+            *This is an automated release from a merged PR to the master branch.*
+          files: artifacts/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
