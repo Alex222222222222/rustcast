@@ -66,6 +66,38 @@ jobs:
             target/release/rustcast-${{ matrix.os }}.exe
           if-no-files-found: ignore
 
+  build_docker:
+    name: Build Docker image
+    needs: build
+    if: github.event.pull_request.merged
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: alex222222222222/rcast:latest
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: index.docker.io/my-docker-hub-namespace/my-docker-hub-repository
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
   create_release:
     name: Create GitHub Release
     needs: build
@@ -91,20 +123,20 @@ jobs:
           echo "$CHANGELOG" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      - name: Delete existing 'latest-build' release
+      - name: Delete existing 'latest' release
         uses: dev-drprasad/delete-tag-and-release@v0.2.1
         with:
           delete_release: true
-          tag_name: latest-build
+          tag_name: latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true # Continue even if no previous release exists
 
-      - name: Create new 'latest-build' release
+      - name: Create new 'latest' release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest-build
+          tag_name: latest
           name: Latest Build
           body: |
             Latest build for commit ${{ github.sha }}
