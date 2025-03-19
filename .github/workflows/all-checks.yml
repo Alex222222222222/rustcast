@@ -4,14 +4,6 @@ on:
   pull_request:
     branches:
       - master
-    paths-ignore:
-      - "docs/**"
-      - ".devcontainer/**"
-      - ".github/**"
-      - README.md
-      - Dockerfile
-      - .gitignore
-      - .dockerignore
   workflow_dispatch: # Allows manual triggering from the GitHub Actions UI
 
 jobs:
