@@ -14,6 +14,8 @@ jobs:
     name: Get target tag
     runs-on: ubuntu-latest
     if: github.event.pull_request.merged
+    outputs:
+      target_tag: ${{ steps.target_tag.outputs.target_tag }}
 
     steps:
       - name: Check out the repo
@@ -36,9 +38,9 @@ jobs:
         id: target_tag
         run: |
           if [[ "${{ env.VERSION }}" == "${{ env.TAG }}" ]]; then
-            echo "TARGET_TAG=latest" >> $GITHUB_ENV
+            echo "target_tag=latest" >> $GITHUB_OUTPUT
           else
-            echo "TARGET_TAG=${{ env.VERSION }}" >> $GITHUB_ENV
+            echo "target_tag=${{ env.VERSION }}" >> $GITHUB_OUTPUT
           fi
 
   build:
@@ -99,7 +101,7 @@ jobs:
 
   build_docker:
     name: Build Docker image
-    needs: build
+    needs: [build, get_target_tag]
     if: github.event.pull_request.merged
     runs-on: ubuntu-latest
 
@@ -120,11 +122,11 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: alex222222222222/rcast:${{ env.TARGET_TAG }}
+          tags: alex222222222222/rcast:${{ needs.get_target_tag.outputs.target_tag }}
 
   create_release:
     name: Create GitHub Release
-    needs: build
+    needs: [build, get_target_tag]
     if: github.event.pull_request.merged
     runs-on: ubuntu-latest
 
@@ -151,13 +153,13 @@ jobs:
         uses: dev-drprasad/delete-tag-and-release@v0.2.1
         with:
           delete_release: true
-          tag_name: ${{ env.TARGET_TAG }}
+          tag_name: ${{ needs.get_target_tag.outputs.target_tag }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true # Continue even if no previous release exists
 
       - name: Create new 'latest' release
-        if: ${{ env.TARGET_TAG == 'latest' }}
+        if: ${{ needs.get_target_tag.outputs.target_tag == 'latest' }}
         id: create_release_latest
         uses: softprops/action-gh-release@v2
         with:
@@ -176,14 +178,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create new release
-        if: ${{ env.TARGET_TAG != 'latest' }}
+        if: ${{ needs.get_target_tag.outputs.target_tag != 'latest' }}
         id: create_release_version
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.TARGET_TAG }}
-          name: ${{ env.TARGET_TAG }} Release
+          tag_name: ${{ needs.get_target_tag.outputs.target_tag }}
+          name: ${{ needs.get_target_tag.outputs.target_tag }} Release
           body: |
-            Release ${{ env.TARGET_TAG }}
+            Release ${{ needs.get_target_tag.outputs.target_tag }}
 
             ## Recent changes:
             ${{ env.CHANGELOG }}
