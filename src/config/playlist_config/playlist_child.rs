@@ -10,6 +10,8 @@ pub enum PlaylistChildConfig {
         #[serde(default)]
         shuffle: Option<bool>,
         #[serde(default)]
+        recursive: Option<bool>,
+        #[serde(default)]
         fail_over: Option<Arc<PlaylistChildConfig>>,
     },
     LocalFiles {
@@ -28,6 +30,8 @@ pub enum PlaylistChildConfig {
         repeat: Option<bool>,
         #[serde(default)]
         shuffle: Option<bool>,
+        #[serde(default)]
+        recursive: Option<bool>,
         #[serde(default)]
         fail_over: Option<Arc<PlaylistChildConfig>>,
     },

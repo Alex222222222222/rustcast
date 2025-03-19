@@ -48,6 +48,7 @@ pub trait FileProvider: Send + Sync {
     async fn list_files<'s, 'p>(
         &'s self,
         path: Option<&'p str>,
+        recursive: bool,
     ) -> anyhow::Result<std::pin::Pin<Box<dyn Stream<Item = anyhow::Result<String>> + Send + 'p>>>
     where
         's: 'p;

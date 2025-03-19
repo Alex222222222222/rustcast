@@ -53,6 +53,7 @@ impl FileProvider for LocalFileProvider {
     async fn list_files<'s, 'p>(
         &'s self,
         path: Option<&'p str>,
+        recursive: bool,
     ) -> anyhow::Result<std::pin::Pin<Box<dyn Stream<Item = anyhow::Result<String>> + Send + 'p>>>
     where
         's: 'p,
@@ -87,7 +88,9 @@ impl FileProvider for LocalFileProvider {
                         let f = f;
                         let t = f.file_type().await?;
                         if t.is_dir() {
-                            dirs.push_back(f.path());
+                            if recursive {
+                                dirs.push_back(f.path());
+                            }
                         } else {
                             yield Ok(f.path().to_string_lossy().to_string());
                         }

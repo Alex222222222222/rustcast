@@ -16,6 +16,7 @@ use tokio_stream::StreamExt;
 #[custom_input_type(input_type(name = "tracks", input_type = "Arc<String>"))]
 #[custom_input_type(additional_input(name = "repeat", input_type = "bool", default = "false"))]
 #[custom_input_type(additional_input(name = "shuffle", input_type = "bool", default = "false"))]
+#[custom_input_type(additional_input(name = "recursive", input_type = "bool", default = "false"))]
 #[custom_input_type(additional_input(
     name = "file_provider",
     input_type = "Arc<dyn FileProvider>",
@@ -24,16 +25,18 @@ use tokio_stream::StreamExt;
 ))]
 struct LocalFolderInner {
     /// list of local file tracks
-    tracks: PlaylistChildList<String, Arc<dyn FileProvider>>,
+    tracks: PlaylistChildList<(Arc<String>, bool), Arc<dyn FileProvider>>,
 }
 
 async fn folder_to_stream(
-    p: Arc<String>,
+    p: Arc<(Arc<String>, bool)>,
     file_provider: Arc<dyn FileProvider>,
 ) -> anyhow::Result<Pin<Box<dyn Stream<Item = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>> {
+    let recursive = p.1;
+    let p = p.0.clone();
     let s = stream! {
         let file_provider1 = file_provider.clone();
-        let mut o_s = file_provider.list_files(Some(p.as_ref())).await?;
+        let mut o_s = file_provider.list_files(Some(p.as_ref()), recursive).await?;
         while let Some(i) = o_s.next().await {
             match i {
                 Ok(i) => {
@@ -59,7 +62,7 @@ async fn folder_to_stream(
 type ReturnStream = Pin<Box<dyn Stream<Item = anyhow::Result<Box<dyn PlaylistChild>>> + Send>>;
 
 fn original_data2_stream_default(
-    p: Arc<String>,
+    p: Arc<(Arc<String>, bool)>,
     fp: Arc<dyn FileProvider>,
 ) -> Pin<Box<dyn Future<Output = anyhow::Result<ReturnStream>> + Send>> {
     Box::pin(folder_to_stream(p, fp))
@@ -70,8 +73,10 @@ impl LocalFolderInner {
         tracks: Arc<String>,
         repeat: bool,
         shuffle: bool,
+        recursive: bool,
         file_provider: Arc<dyn FileProvider>,
     ) -> anyhow::Result<Self> {
+        let tracks = Arc::new((tracks, recursive));
         Ok(Self {
             tracks: PlaylistChildList::new(
                 tracks,

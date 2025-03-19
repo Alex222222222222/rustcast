@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use async_stream::stream;
 use async_trait::async_trait;
 use cache::GcpDownloader;
 use futures::{Stream, StreamExt};
@@ -51,25 +50,35 @@ impl FileProvider for GoogleCouldStorageFileProvider {
         };
         Ok(Some(meta))
     }
+
     async fn list_files<'s, 'p>(
         &'s self,
         path: Option<&'p str>,
+        recursive: bool,
     ) -> anyhow::Result<std::pin::Pin<Box<dyn Stream<Item = anyhow::Result<String>> + Send + 'p>>>
     where
         's: 'p,
     {
         debug!("list files in {:?}", path);
-        let s = stream! {
-            let p = match path {
-                Some(p) => Some(object_store::path::Path::parse(p)?),
-                None => None,
-            };
-            let mut s = self.object_store.list(p.as_ref());
-
-            while let Some(meta) = s.next().await {
-                yield meta.map(|m| m.location.to_string()).map_err(|e| e.into());
-            }
+        let p = match path {
+            Some(p) => Some(object_store::path::Path::parse(p)?),
+            None => None,
         };
+        let s = if recursive {
+            // the list method is recursive
+            self.object_store.list(p.as_ref())
+        } else {
+            // the list_with_delimiter method is not recursive
+            let s = self
+                .object_store
+                .list_with_delimiter(p.as_ref())
+                .await?
+                .objects;
+            let s = futures::stream::iter(s).map(Ok);
+            Box::pin(s)
+        };
+
+        let s = s.map(|m| m.map(|r| r.location.to_string()).map_err(|e| e.into()));
 
         Ok(Box::pin(s))
     }
