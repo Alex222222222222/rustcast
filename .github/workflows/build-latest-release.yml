@@ -158,7 +158,7 @@ jobs:
 
       - name: Create new 'latest' release
         if: ${{ env.TARGET_TAG == 'latest' }}
-        id: create_release
+        id: create_release_latest
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
@@ -177,7 +177,7 @@ jobs:
 
       - name: Create new release
         if: ${{ env.TARGET_TAG != 'latest' }}
-        id: create_release
+        id: create_release_version
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TARGET_TAG }}
