@@ -35,13 +35,13 @@ async fn build_playlist_child_from_config(
              folder,
              repeat,
              shuffle,
+             recursive,
              // TODO add fail_over functionality
-             // TODO add recursive find file functionality
              ..
          } => {
              let file_provider = Arc::new(LocalFileProvider::new());
              Box::new(
-                 crate::playlist::LocalFolder::new(folder, repeat, shuffle, file_provider)?,
+                 crate::playlist::LocalFolder::new(folder, repeat, shuffle, recursive, file_provider)?,
              )
          }
 
@@ -53,7 +53,7 @@ async fn build_playlist_child_from_config(
                  crate::playlist::LocalFileTrackList::new(files, repeat, shuffle, file_provider)?,
              )
          },
-         PlaylistChildConfig::RemoteFolder { folder, remote_client, repeat, shuffle, ..
+         PlaylistChildConfig::RemoteFolder { folder, remote_client, repeat, shuffle, recursive, ..
              // TODO add fail_over functionality
          } => {
              let file_provider = match file_provider.get(remote_client.as_str()){
@@ -61,7 +61,7 @@ async fn build_playlist_child_from_config(
                  None => return Err(anyhow::anyhow!("No file provider found for {}", remote_client)),
              };
              Box::new(
-                 crate::playlist::LocalFolder::new(folder, repeat, shuffle, file_provider)?,
+                 crate::playlist::LocalFolder::new(folder, repeat, shuffle,recursive, file_provider)?,
              )
          },
          PlaylistChildConfig::RemoteFiles { files, remote_client, repeat, shuffle, ..

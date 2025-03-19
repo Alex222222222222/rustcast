@@ -191,6 +191,7 @@ Supported `playlist child` types:
   - `folder`: Path to the local folder containing audio files
   - `repeat`: Whether to loop the playlist when finished (optional), default is `false`
   - `shuffle`: Whether to randomize the playback order (optional), default is `false`
+  - `recursive`: Whether to include files in subdirectories (optional), default is `false`
   - `fail_over`: Alternative playlist to use if this source fails (optional), the object must be a `playlist child` object.
 
 ```json
@@ -199,6 +200,7 @@ Supported `playlist child` types:
     "folder": "/path/to/music",
     "repeat": true,
     "shuffle": true,
+    "recursive": true,
     "fail_over": {
       "LocalFolder": {
         "folder": "/path/to/backup"
@@ -236,6 +238,7 @@ Supported `playlist child` types:
   - `remote_client`: Name of the configured remote storage provider
   - `repeat`: Whether to loop the playlist when finished (optional), default is `false`
   - `shuffle`: Whether to randomize the playback order (optional), default is `false`
+  - `recursive`: Whether to include files in subdirectories (optional), default is `false`
   - `fail_over`: Alternative playlist to use if this source fails (optional), the object must be a `playlist child` object.
 
 ```json
