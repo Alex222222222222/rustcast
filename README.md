@@ -176,12 +176,14 @@ The following is a simple example of a playlist:
 #### Playlist Child
 
 Supported `playlist child` types:
-- `Silent`: Placeholder for silent output (generates silent 1s frames)
+- `Silent`: Placeholder for silent output (generates silent 1s frames), useful for failover
 - `LocalFolder`: Stream audio files from a local folder
 - `LocalFiles`: Stream specific audio files from local storage
 - `RemoteFolder`: Stream audio files from remote storage
 - `RemoteFiles`: Stream specific audio files from remote storage
 - `Playlists`: Combine multiple playlist sources
+
+> Silent audio is provided by the this repo: [anars/blank-audio](https://github.com/anars/blank-audio).
 
 ##### Local Folder
 

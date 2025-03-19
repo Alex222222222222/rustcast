@@ -30,6 +30,7 @@ async fn build_playlist_child_from_config(
     file_provider: Arc<HashMap<String, Arc<dyn FileProvider>>>,
 ) -> anyhow::Result<Box<dyn PlaylistChild>> {
     let child: Box<dyn PlaylistChild> = match playlist {
+        PlaylistChildConfig::Silent => Box::new(crate::playlist::Silent::new()?),
          PlaylistChildConfig::LocalFolder {
              folder,
              repeat,
@@ -43,7 +44,7 @@ async fn build_playlist_child_from_config(
                  crate::playlist::LocalFolder::new(folder, repeat, shuffle, file_provider)?,
              )
          }
-         PlaylistChildConfig::Silent => todo!("Implement this match arm"),
+
          PlaylistChildConfig::LocalFiles { files, repeat, shuffle, ..
              // TODO add fail_over functionality
          } => {

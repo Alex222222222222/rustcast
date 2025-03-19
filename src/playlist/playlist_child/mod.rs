@@ -8,11 +8,13 @@ mod impl_playlist_child_by_redirect_to_self_variable;
 mod infinite_shuffle_stream;
 mod local;
 mod playlist_child_list;
+mod silent;
 
 use bytes::Bytes;
 // re-export the local module
 pub use local::*;
 pub use playlist_child_list::PlaylistChildList;
+pub use silent::Silent;
 
 #[derive(Clone)]
 pub struct FrameWithMeta {
