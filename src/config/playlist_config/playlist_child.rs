@@ -90,13 +90,14 @@ mod tests {
         let config = PlaylistChildConfig::from_json(json).await.unwrap();
         match config {
             PlaylistChildConfig::LocalFolder { fail_over, .. } => {
-                assert_eq!(*fail_over.unwrap(), PlaylistChildConfig::LocalFolder {
+                let target = PlaylistChildConfig::LocalFolder {
                     folder: Arc::new("/app/music".to_string()),
                     repeat: None,
                     shuffle: None,
                     recursive: None,
                     fail_over: Some(Arc::new(PlaylistChildConfig::Silent)),
-                })
+                };
+                assert_eq!(*fail_over.unwrap(), target)
             }
             _ => panic!("Expected LocalFolder variant"),
         }
