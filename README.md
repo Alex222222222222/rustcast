@@ -15,31 +15,74 @@ AWS S3, and Google Cloud Storage with configurable playlists and outputs.
 
 ## Roadmap
 
-- [ ] Silent Playlist Source
 - [ ] WebDAV File Provider
 - [ ] Azure Blob Storage File Provider
 - [ ] HTTP File Provider
 - [ ] Failover Improvements
 - [ ] Support other types of outputs (e.g. Icecast)
 - [ ] Support other read formats (e.g. FLAC)
-- [ ] Support weighted shuffle for playlists
-- [ ] CI/CD Build Pipeline
-- [ ] CI/CD Test Pipeline
 - [ ] More robust configuration for variables original internal constants
 - [ ] Self explanatory error messages
-- [ ] Docker image
 - [ ] Documentation for developers
 - [ ] Load file provider configuration from environment variables
 
 ## Installation
 
-Currently there are no pre-built binaries available, so you will need to build RustCast from source.
+Prebuilt binaries are available for Linux, macOS,
+and Windows on the [releases page](https://github.com/Alex222222222222/rustcast/releases)
 
-### Prerequisites
+### Docker
+
+RustCast is also available as a [Docker image](https://hub.docker.com/r/alex222222222222/rcast).
+The docker image use this default config file at `/app/config/config.json`:
+
+```json
+{
+    "playlists": {
+        "main": {
+            "name": "RustCast Default Stream",
+            "child": {
+                "LocalFolder": {
+                    "folder": "/app/music",
+                    "repeat": true,
+                    "shuffle": true,
+                    "fail_over": "Silent"
+                }
+            }
+        }
+    },
+    "file_provider": {},
+    "outputs": [
+        {
+            "host": "0.0.0.0",
+            "port": 8080,
+            "path": "/",
+            "playlist": "main"
+        }
+    ],
+    "log_level": "info",
+    "log_file": ["stdout", "/app/logs/rustcast.log"]
+}
+```
+
+You can mount your own config file to `/app/config/config.json` and your music folder to `/app/music`:
+
+```bash
+docker run -v /path/to/config.json:/app/config/config.json \
+    -v /path/to/music:/app/music \
+    -p 8080:8080 \
+    alex222222222222/rcast
+```
+
+### Building
+
+If you prefer to build RustCast from source, follow the instructions below.
+
+#### Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install)
 
-### Building
+#### Build Steps
 
 To build RustCast, clone the repository and run the following command:
 
@@ -224,8 +267,7 @@ Supported `playlist child` types:
     "files": ["/path/to/song1.mp3", "/path/to/song2.mp3"],
     "repeat": true,
     "shuffle": true,
-    "fail_over": {
-      "Silent": {}
+    "fail_over": "Silent"
     }
   }
 }
@@ -308,9 +350,7 @@ Supported `playlist child` types:
     ],
     "repeat": true,
     "shuffle": true,
-    "fail_over": {
-      "Silent": {}
-    }
+    "fail_over": "Silent"
   }
 }
 ```

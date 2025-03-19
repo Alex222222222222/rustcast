@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-#[derive(Debug, serde::Deserialize, Clone)]
+#[derive(Debug, serde::Deserialize, Clone, PartialEq, Eq)]
 pub enum PlaylistChildConfig {
     Silent,
     LocalFolder {
@@ -70,6 +70,36 @@ mod tests {
     #[tokio::test]
     async fn test_playlist_child_config_sync_send() {
         assert_impl_all!(PlaylistChildConfig: Send, Sync);
+    }
+
+    #[tokio::test]
+    async fn test_playlist_child_fail_over_silent() {
+        let json = r#"{"LocalFolder":{"folder": "/app/music","fail_over": "Silent"}}"#;
+        let config = PlaylistChildConfig::from_json(json).await.unwrap();
+        match config {
+            PlaylistChildConfig::LocalFolder { fail_over, .. } => {
+                assert_eq!(*fail_over.unwrap(), PlaylistChildConfig::Silent)
+            }
+            _ => panic!("Expected LocalFolder variant"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_playlist_child_fail_over_folder() {
+        let json = r#"{"LocalFolder":{"folder":"/app/music","fail_over":{"LocalFolder":{"folder":"/app/music","fail_over":"Silent"}}}}"#;
+        let config = PlaylistChildConfig::from_json(json).await.unwrap();
+        match config {
+            PlaylistChildConfig::LocalFolder { fail_over, .. } => {
+                assert_eq!(*fail_over.unwrap(), PlaylistChildConfig::LocalFolder {
+                    folder: Arc::new("/app/music".to_string()),
+                    repeat: None,
+                    shuffle: None,
+                    recursive: None,
+                    fail_over: Some(Arc::new(PlaylistChildConfig::Silent)),
+                })
+            }
+            _ => panic!("Expected LocalFolder variant"),
+        }
     }
 
     #[tokio::test]
