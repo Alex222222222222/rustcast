@@ -14,13 +14,19 @@ pub struct AwsS3FileProvider {
 }
 
 impl AwsS3FileProvider {
-    pub async fn new(builder: AmazonS3Builder) -> anyhow::Result<Self> {
+    pub async fn new(
+        cache_dir: Option<Arc<String>>,
+        builder: AmazonS3Builder,
+    ) -> anyhow::Result<Self> {
         let aws_downloader = AwsS3Downloader::new(builder)?;
         let object_store = aws_downloader.get_object_store();
-        let cache = cache::Cache::builder()
-            .file_downloader(Box::new(aws_downloader))
-            .build()
-            .await?;
+        let mut cache = cache::Cache::builder().file_downloader(Box::new(aws_downloader));
+        if let Some(dir) = cache_dir {
+            let path = PathBuf::from(dir.as_str());
+            cache = cache.dir(path);
+        };
+
+        let cache = cache.build().await?;
         Ok(Self {
             cache: cache.into(),
             object_store,

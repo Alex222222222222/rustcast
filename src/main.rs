@@ -43,10 +43,12 @@ async fn main() -> anyhow::Result<()> {
         file_provider,
         playlists,
         outputs,
+        cache_dir,
         ..
     } = config::GlobalConfig::from_clap_args(config).await?;
 
-    let file_provider = Arc::new(file_provider::build_file_provider(file_provider).await?);
+    let file_provider =
+        Arc::new(file_provider::build_file_provider(cache_dir, file_provider).await?);
     let playlists = build_playlist_from_config(playlists, file_provider).await?;
 
     let mut outputs_map = HashMap::new();

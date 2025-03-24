@@ -176,6 +176,19 @@ Options:
           Print version
 ```
 
+### Configuration Fields
+
+- `playlists`: Configuration for playlists, check [Playlists Configuration](#playlists-configuration)
+- `file_provider`: Configuration for file providers, check [File Provider Configuration](#file-provider-configuration)
+- `outputs`: Configuration for outputs, check [Output Configuration](#output-configuration)
+- `log_level`: Log level for the application, default is `info` (optional). Possible values: `off`, `error`, `warn`, `info`, `debug`, `trace`.
+- `log_file`: Log file path(s) for the application, default is `stdout` (optional). Can be specified multiple times.
+- `cache_dir`: Directory to store cached audio files when use remote file source (optional). On Unix like system, default to the `cache` subdir of `TMPDIR` environment variable if it is set, otherwise the value is OS-specific:
+  - On Darwin-based OSes (macOS, iOS, etc) it default to the `cache` subdir of the directory provided by confstr(_CS_DARWIN_USER_TEMP_DIR, ...), as recommended by Apple’s security guidelines.
+  - On all other unix-based OSes, it default to /tmp/cache.
+> Note: the default value of `cache_dir` get from rust `std::env::temp_dir()`,
+> for more information, please refer to [std::env::temp_dir](https://doc.rust-lang.org/std/env/fn.temp_dir.html)
+
 ### Playlists Configuration
 
 Playlists consist of maps where the key is used in the later definition of outputs,

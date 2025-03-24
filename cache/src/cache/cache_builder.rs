@@ -58,13 +58,10 @@ impl CacheBuilder {
 
     /// Build the `Cache` object.
     pub async fn build(self) -> Result<Cache, Error> {
-        let dir = self.config.dir.unwrap_or_else(|| {
-            if let Some(dir_str) = env::var_os("RUST_CACHED_PATH_ROOT") {
-                PathBuf::from(dir_str)
-            } else {
-                env::temp_dir().join("cache/")
-            }
-        });
+        let dir = self
+            .config
+            .dir
+            .unwrap_or_else(|| env::temp_dir().join("cache/"));
         tokio::fs::create_dir_all(&dir).await?;
         Ok(Cache {
             dir,
