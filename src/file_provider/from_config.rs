@@ -18,6 +18,7 @@ fn serde_json_value_to_string(value: serde_json::Value) -> anyhow::Result<String
 }
 
 pub async fn build_file_provider(
+    cache_dir: Option<Arc<String>>,
     config: HashMap<String, crate::config::FileProviderConfig>,
 ) -> anyhow::Result<HashMap<String, Arc<dyn FileProvider>>> {
     let mut res = HashMap::new();
@@ -30,7 +31,7 @@ pub async fn build_file_provider(
                         s3_builder.with_config(key.into(), serde_json_value_to_string(value)?)
                 }
 
-                Arc::new(AwsS3FileProvider::new(s3_builder).await?)
+                Arc::new(AwsS3FileProvider::new(cache_dir.clone(), s3_builder).await?)
             }
             crate::config::FileProviderConfig::GoogleCloudStorage(keys) => {
                 let mut gcp_builder = object_store::gcp::GoogleCloudStorageBuilder::new();
@@ -39,7 +40,7 @@ pub async fn build_file_provider(
                         gcp_builder.with_config(key.into(), serde_json_value_to_string(value)?)
                 }
 
-                Arc::new(GoogleCouldStorageFileProvider::new(gcp_builder).await?)
+                Arc::new(GoogleCouldStorageFileProvider::new(cache_dir.clone(), gcp_builder).await?)
             }
         };
         res.insert(name, provider);

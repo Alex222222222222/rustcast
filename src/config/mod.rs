@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 mod clap_args;
 mod file_provider_config;
@@ -20,6 +20,8 @@ pub struct GlobalConfig {
     pub log_level: Option<LogLevel>,
     #[serde(default)]
     pub log_file: Vec<String>,
+    #[serde(default)]
+    pub cache_dir: Option<Arc<String>>,
 }
 
 #[derive(Debug, serde::Deserialize)]
