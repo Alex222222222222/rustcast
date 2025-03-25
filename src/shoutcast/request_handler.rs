@@ -180,7 +180,8 @@ impl RequestHandler {
         let content_type = self.playlist.get_content_type().await;
 
         debug!("write stream start response");
-        self.sink.send("ICY 200 OK\r\n").await?;
+        self.sink.send("HTTP/1.0 200 OK\r\n").await?;
+        // self.sink.send("ICY 200 OK\r\n").await?;
 
         self.sink.send("Content-Type: ").await?;
         self.sink.send(content_type).await?;
