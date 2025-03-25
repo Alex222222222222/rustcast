@@ -55,7 +55,7 @@ RUN chown rustcast:rustcast /app/config/config.json
 
 # Install runtime dependencies
 RUN apt-get update \
-    && apt-get install -y libssl3 \
+    && apt-get install -y libssl3 ca-certificates\
     && apt clean \
     && rm -rf /var/lib/apt/lists/*
 
