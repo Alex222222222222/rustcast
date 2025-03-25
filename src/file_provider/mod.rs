@@ -41,7 +41,7 @@ pub trait FileProvider: Send + Sync {
 
     /// Get meta of a file from the file provider.
     /// Returns the meta if the file exists, otherwise None.
-    async fn get_meta(&self, path: &str) -> anyhow::Result<Option<cache::FileMetadata>>;
+    async fn get_meta(&self, path: &str) -> anyhow::Result<Option<crate::cache::FileMetadata>>;
 
     /// List files in a directory.
     /// Returns iterator of file paths.

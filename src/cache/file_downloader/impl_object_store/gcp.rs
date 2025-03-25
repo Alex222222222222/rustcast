@@ -11,7 +11,7 @@ use object_store::{
 };
 use sha2::Digest;
 
-use crate::{Error, FileDownloader, FileMetadata};
+use super::super::{Error, FileDownloader, FileMetadata};
 
 use super::{CLIENT_CONFIG_KEYS, object_store_config_key_to_string};
 
@@ -110,7 +110,7 @@ impl FileDownloader for GcpDownloader {
             Ok(meta) => Ok(FileMetadata {
                 size: meta.size,
                 location: meta.location.to_string(),
-                last_modified: chrono::DateTime::from(meta.last_modified),
+                last_modified: meta.last_modified,
                 e_tag: meta.e_tag,
             }),
             Err(object_store::Error::NotFound { .. }) => {

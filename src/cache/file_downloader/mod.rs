@@ -9,7 +9,7 @@ pub use impl_object_store::*;
 pub use local_downloader::LocalDownloader;
 use serde::{Deserialize, Serialize};
 
-use crate::Error;
+use super::Error;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileMetadata {

@@ -34,12 +34,12 @@ impl FileProvider for LocalFileProvider {
         }
     }
 
-    async fn get_meta(&self, path: &str) -> anyhow::Result<Option<cache::FileMetadata>> {
+    async fn get_meta(&self, path: &str) -> anyhow::Result<Option<crate::cache::FileMetadata>> {
         // test if the file exists
         let path_buf = PathBuf::from(path);
         if path_buf.exists() {
             let meta = path_buf.metadata()?;
-            Ok(Some(cache::FileMetadata {
+            Ok(Some(crate::cache::FileMetadata {
                 size: meta.len() as usize,
                 location: path.to_string(),
                 last_modified: meta.modified()?.into(),

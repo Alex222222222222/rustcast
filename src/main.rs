@@ -2,9 +2,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use clap::Parser;
 
-mod context;
-
+mod cache;
 pub mod config;
+mod context;
 mod file_provider;
 mod playlist;
 mod shoutcast;

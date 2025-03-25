@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
+use crate::cache;
 use async_trait::async_trait;
 use cache::AwsS3Downloader;
 use futures::{Stream, StreamExt};
