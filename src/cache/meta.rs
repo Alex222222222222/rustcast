@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::utils::now;
-use crate::{Error, FileMetadata};
+use super::utils::now;
+use super::{Error, FileMetadata};
 
 /// Holds information about a cached resource.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

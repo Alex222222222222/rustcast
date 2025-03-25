@@ -2,15 +2,14 @@ use futures::StreamExt;
 use glob::glob;
 use log::{debug, info};
 use sha2::Digest;
-use std::default::Default;
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
-use crate::utils::hash_str;
-use crate::{Error, meta::Meta};
-use crate::{FileDownloader, FileMetadata};
+use super::utils::hash_str;
+use super::{Error, meta::Meta};
+use super::{FileDownloader, FileMetadata};
 
 mod cache_builder;
 pub use cache_builder::*;
@@ -30,11 +29,6 @@ pub struct Cache {
 }
 
 impl Cache {
-    /// Create a new `Cache` instance.
-    pub async fn new() -> Result<Self, Error> {
-        Cache::builder().build().await
-    }
-
     /// Create a `CacheBuilder`.
     pub fn builder() -> CacheBuilder {
         CacheBuilder::new()
@@ -46,31 +40,6 @@ impl Cache {
     /// Otherwise, we will call the downloader to fetch the resource.
     /// It will cached locally and the path to the cache file will be returned.
     pub async fn cached_path(&self, resource: &str) -> Result<PathBuf, Error> {
-        self.cached_path_with_options(resource, &Options::default())
-            .await
-    }
-
-    /// Get the cached path to a resource using the given options.
-    ///
-    /// # Examples
-    ///
-    /// Use a particular subdirectory of the cache root:
-    ///
-    /// ```rust,no_run
-    /// # use cached_path::{Cache, Options};
-    /// # let cache = Cache::new().unwrap();
-    /// # let subdir = "target";
-    /// # let resource = "README.md";
-    /// let path = cache.cached_path_with_options(
-    ///     resource,
-    ///     &Options::default().subdir(subdir),
-    /// ).unwrap();
-    /// ```
-    pub async fn cached_path_with_options(
-        &self,
-        resource: &str,
-        options: &Options,
-    ) -> Result<PathBuf, Error> {
         let cached_path: PathBuf;
 
         if self.file_downloader.is_local() {
@@ -82,9 +51,7 @@ impl Cache {
             }
         } else {
             // This is a remote resource, so fetch it to the cache.
-            let meta = self
-                .fetch_remote_resource(resource, options.subdir.as_deref())
-                .await?;
+            let meta = self.fetch_remote_resource(resource).await?;
 
             cached_path = meta.resource_path;
         }
@@ -92,21 +59,13 @@ impl Cache {
         Ok(cached_path)
     }
 
-    async fn fetch_remote_resource(
-        &self,
-        resource: &str,
-        subdir: Option<&str>,
-    ) -> Result<Meta, Error> {
+    async fn fetch_remote_resource(&self, resource: &str) -> Result<Meta, Error> {
         // Ensure root directory exists in case it has changed or been removed.
-        if let Some(subdir_path) = subdir {
-            tokio::fs::create_dir_all(self.dir.join(subdir_path)).await?;
-        } else {
-            tokio::fs::create_dir_all(&self.dir).await?;
-        };
+        tokio::fs::create_dir_all(&self.dir).await?;
 
         // Find any existing cached versions of resource and check if they are still
         // fresh according to the `freshness_lifetime` setting.
-        let versions = self.find_existing(resource, subdir).await; // already sorted, latest is first.
+        let versions = self.find_existing(resource).await; // already sorted, latest is first.
         if !versions.is_empty() && versions[0].is_fresh(self.freshness_lifetime) {
             // Oh hey, the latest version is still fresh!
             info!("Latest cached version of {} is still fresh", resource);
@@ -117,12 +76,7 @@ impl Cache {
         // lifetimes, so we'll query for the ETAG of the resource and then compare
         // that with any existing versions.
         let file_meta = self.get_file_meta(resource).await?;
-        let path = self.resource_to_filepath(
-            &file_meta.location,
-            subdir,
-            None,
-            file_meta.e_tag.as_deref(),
-        );
+        let path = self.resource_to_filepath(&file_meta.location, None, file_meta.e_tag.as_deref());
         debug!("Resource path: {:?}", path);
 
         // TODO do we need to lock the file here?
@@ -146,11 +100,11 @@ impl Cache {
     }
 
     /// Find existing versions of a cached resource, sorted by most recent first.
-    async fn find_existing(&self, resource: &str, subdir: Option<&str>) -> Vec<Meta> {
+    async fn find_existing(&self, resource: &str) -> Vec<Meta> {
         let mut existing_meta: Vec<Meta> = vec![];
         let glob_string = format!(
             "{}.*.meta",
-            self.resource_to_filepath(resource, subdir, None, None)
+            self.resource_to_filepath(resource, None, None)
                 .to_str()
                 .unwrap(),
         );
@@ -208,7 +162,6 @@ impl Cache {
     fn resource_to_filepath(
         &self,
         resource: &str,
-        subdir: Option<&str>,
         suffix: Option<&str>,
         e_tag: Option<&str>,
     ) -> PathBuf {
@@ -217,7 +170,7 @@ impl Cache {
         resource_hash.update(resource.as_bytes());
         let resource_hash = format!("{:x}", resource_hash.finalize());
         let mut filename = if let Some(tag) = e_tag {
-            let etag_hash = hash_str(&tag[..]);
+            let etag_hash = hash_str(tag);
             format!("{}.{}", resource_hash, etag_hash)
         } else {
             resource_hash
@@ -229,10 +182,6 @@ impl Cache {
 
         let filepath = PathBuf::from(filename);
 
-        if let Some(subdir_path) = subdir {
-            self.dir.join(subdir_path).join(filepath)
-        } else {
-            self.dir.join(filepath)
-        }
+        self.dir.join(filepath)
     }
 }

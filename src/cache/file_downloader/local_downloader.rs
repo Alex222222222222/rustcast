@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use futures::Stream;
 
-use crate::Error;
+use super::Error;
 
 use super::FileMetadata;
 
