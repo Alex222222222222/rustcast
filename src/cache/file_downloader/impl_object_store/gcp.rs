@@ -108,7 +108,7 @@ impl FileDownloader for GcpDownloader {
         let path = object_store::path::Path::parse(path)?;
         match self.object_store.head(&path).await {
             Ok(meta) => Ok(FileMetadata {
-                size: meta.size,
+                size: meta.size as usize,
                 location: meta.location.to_string(),
                 last_modified: meta.last_modified,
                 e_tag: meta.e_tag,
