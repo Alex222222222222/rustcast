@@ -7,7 +7,7 @@ edition = "2024"
 proc-macro2 = "1"
 quote = "1"
 syn = "2"
-darling = "0.20"
+darling = "0.21"
 
 [lib]
 proc-macro = true
